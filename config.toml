@@ -18,3 +18,22 @@ port = 2199
 cors_origin = "*"
 debug = false
 logfile_path = "logs/wildwings.txt"
+
+[subscriber]
+client_id = "local_subscriber"
+qos = 1
+broker = "localhost"
+port = 1883
+logfile_path = "logs/mqtt_subscriber.txt" 
+smartfields_url = "http://smartfields:2188/initiate_process"
+
+# MQTT topic mapping for each Pi
+[mqtt_topics."pi/001/events"]
+lat = 40.123
+lon = -83.654
+camid = "pi-001"
+
+[mqtt_topics."pi/002/events"]
+lat = 40.567
+lon = -83.321
+camid = "pi-002"

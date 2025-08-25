@@ -73,6 +73,32 @@ services:
       timeout: 10s
       retries: 3
 
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: mqtt
+    ports:
+      - "1883:1883"
+    networks:
+      - smartfield-network
+    restart: unless-stopped
+
+  mqtt_subscriber:
+    build:
+      context: ./services/mqtt_subscriber
+      dockerfile: Dockerfile
+    container_name: mqtt_subscriber
+    depends_on:
+      - mqtt
+      - smartfield
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - ./logs:/app/logs
+    networks:
+      - smartfield-network
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+
   loki:
     image: grafana/loki:2.9.0
     container_name: loki
