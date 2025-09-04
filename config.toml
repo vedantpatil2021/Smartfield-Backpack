@@ -28,12 +28,12 @@ logfile_path = "logs/mqtt_subscriber.txt"
 smartfields_url = "http://smartfields:2188/initiate_process"
 
 # MQTT topic mapping for each Pi
-[mqtt_topics."pi/001/events"]
-lat = 40.123
-lon = -83.654
+[mqtt_topics."cameratrap/events"]
+lat = 40.00811
+lon = -83.01809
 camid = "pi-001"
 
-[mqtt_topics."pi/002/events"]
-lat = 40.567
-lon = -83.321
-camid = "pi-002"
+#[mqtt_topics."pi/002/events"]
+#lat = 40.00811
+#lon = -83.01809
+#camid = "pi-002"

@@ -44,7 +44,7 @@ def run(drone, lat=None, long=None):
             drone.piloting.move_to(
                 lat=lat_float, 
                 lon=long_float, 
-                alt=20, 
+                alt=13, 
                 orientation_mode="NONE", 
                 heading=0, 
                 wait=True
@@ -58,7 +58,7 @@ def run(drone, lat=None, long=None):
             drone.piloting.move_to(
                 lat=lat_float, 
                 lon=long_float, 
-                alt=20, 
+                alt=13, 
                 orientation_mode="NONE", 
                 heading=0, 
                 wait=False

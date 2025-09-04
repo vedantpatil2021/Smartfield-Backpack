@@ -56,8 +56,8 @@ services:
       - "2199:2199"
     volumes:
       - ./config.toml:/app/config.toml:ro
-      - ./logs:/app/logs
-      - ./mission:/app/missions
+      - ./logs:/app/logs:rw
+      - ./mission:/app/missions:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     environment:
       - PYTHONPATH=/app
@@ -78,8 +78,7 @@ services:
     container_name: mqtt
     ports:
       - "1883:1883"
-    networks:
-      - smartfield-network
+    network_mode: "host"
     restart: unless-stopped
 
   mqtt_subscriber:
@@ -93,8 +92,7 @@ services:
     volumes:
       - ./config.toml:/app/config.toml:ro
       - ./logs:/app/logs
-    networks:
-      - smartfield-network
+    network_mode: "host"
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1

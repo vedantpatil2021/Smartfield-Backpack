@@ -11,16 +11,7 @@ import time
 import csv 
 import os
 import datetime
-import logging
-
-# Set OpenCV backend for Docker environments
-os.environ['OPENCV_VIDEOIO_PRIORITY_MSMF'] = '0'
-os.environ['QT_QPA_PLATFORM'] = 'xcb'
-os.environ['QT_X11_NO_MITSHM'] = '1'
-# Use headless backend for OpenCV
 import matplotlib
-matplotlib.use('Agg')
-cv2.setUseOptimized(True)
 
 
 # To run, first fly the drone an area with direct sight of the zebras using the FreeFlight6 app
@@ -28,7 +19,13 @@ cv2.setUseOptimized(True)
 
 # User-defined mission parameters
 # 5 minutes is 300 seconds
-DURATION = 100 # duration in seconds
+DURATION = 120 # duration in seconds
+# Set OpenCV backend for Docker environments
+os.environ['OPENCV_VIDEOIO_PRIORITY_MSMF'] = '0'
+os.environ['QT_QPA_PLATFORM'] = 'xcb'
+os.environ['QT_X11_NO_MITSHM'] = '1'
+# Use headless backend for OpenCV
+matplotlib.use('Agg')
 
 # Retrieve the filename from command-line arguments
 if len(sys.argv) < 2:
@@ -36,10 +33,6 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 output_directory = sys.argv[1]
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Define CSV file path to store telemetry data
 # Define the CSV file path
@@ -88,24 +81,6 @@ class Tracker:
                     }[yuv_frame.format()]
 
                     cv2frame = cv2.cvtColor(yuv_frame.as_ndarray(), cv2_cvt_color_flag)
-                    
-                    # Display the video stream
-                    logger.info("Starting Video Stream")
-                    try:
-                        # Add frame info overlay for debugging
-                        cv2.putText(cv2frame, f"Frame: {self.media.frame_counter}", (10, 30), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                        cv2.putText(cv2frame, f"Size: {cv2frame.shape}", (10, 70), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                        cv2.imshow('tracking', cv2frame)
-                        # Increase waitKey to prevent GUI blocking
-                        key = cv2.waitKey(30) & 0xFF
-                        if key == ord('q'):
-                            break
-                        if self.media.frame_counter % 60 == 0:  # Log every 60 frames
-                            logger.info(f"Displaying frame {self.media.frame_counter}, size: {cv2frame.shape}")
-                    except Exception as e:
-                        logger.warning(f"Could not display frame: {e}")
 
                     x_direction, y_direction, z_direction = navigation.get_next_action(cv2frame, self.model, output_directory, self.media.frame_counter)  # KEY LINE
                     #self.update_frame(cv2.imread('result.jpg'))
@@ -140,23 +115,16 @@ model = YOLO('yolov5su')
 
 # Connect to the drone
 drone = sp.setup_drone("parrot_anafi", 1, "None")
-logger.info("Attempting to connect to drone...")
-try:
-    drone.connect()
-    logger.info("Drone connected successfully")
-except Exception as e:
-    logger.error(f"Failed to connect to drone: {e}")
-    logger.info("Continuing with simulation mode...")
+drone.connect()
+
 
 # wait for drone to stabilize
 time.sleep(5)
 
 # Create a tracker object
-logger.info("Starting Tracking")
 tracker = Tracker(drone, model)
 
 # set up recording
-logger.info("Starting Recording")
 drone.camera.media.setup_recording()
 drone.camera.media.start_recording()
 
@@ -167,15 +135,10 @@ time.sleep(5)
 drone.camera.media.setup_stream(yuv_frame_processing=tracker.track)
 drone.camera.media.start_stream() 
 
-# set window properties (with error handling for headless environments)
-try:
-    cv2.namedWindow('tracking', cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-    cv2.resizeWindow('tracking', 500, 500)
-    cv2.moveWindow('tracking', 0, 0)
-    cv2.setWindowProperty('tracking', cv2.WND_PROP_TOPMOST, 1)
-    logger.info("Display window created successfully")
-except Exception as e:
-    logger.warning(f"Could not create display window: {e}. Continuing in headless mode.")
+# set window properties
+cv2.namedWindow('tracking', cv2.WINDOW_KEEPRATIO)
+cv2.resizeWindow('tracking', 500, 500)
+cv2.moveWindow('tracking', 0, 0)
 
 # set track duration in seconds
 time.sleep(DURATION)
@@ -185,5 +148,5 @@ drone.camera.media.stop_stream()
 drone.camera.media.stop_recording()
 drone.camera.media.download_last_media()
 
-# Disconnect the drone
+# Disconnect the droneß
 drone.disconnect()

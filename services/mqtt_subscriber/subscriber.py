@@ -17,7 +17,6 @@ topic_mappings = config.get("mqtt_topics", {})
 MQTT_BROKER = sub_cfg.get("broker", "localhost")
 MQTT_PORT = int(sub_cfg.get("port", 1883))
 CLIENT_ID = sub_cfg.get("client_id", "ckn_event_subscriber")
-SMARTFIELDS_API = sub_cfg.get("smartfields_url", "http://smartfields:2188/initiate_process")
 MQTT_QOS = int(sub_cfg.get("qos", 1))
 
 logging.basicConfig(
@@ -29,6 +28,12 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("mqtt_subscriber")
+
+
+def get_services():
+    return {
+        "smartfield": os.getenv("SMARTFIELD_URL", "localhost:2188"),
+    }
 
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
@@ -55,6 +60,9 @@ def on_message(client, userdata, msg):
         lat = mapping["lat"]
         lon = mapping["lon"]
         camid = mapping["camid"]
+
+        SMARTFIELD_URL = get_services()["smartfield"]
+        SMARTFIELDS_API = f"http://{SMARTFIELD_URL}/initiate_process"
 
         response = requests.get(
             SMARTFIELDS_API,

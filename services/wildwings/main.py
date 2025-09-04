@@ -122,7 +122,7 @@ async def root():
     logger.info("Root endpoint accessed")
     return {"message": "WildWings Service", "status": "running"}
 
-@app.post("/start_mission")
+@app.post("/start")
 async def start_mission():
     logger.info("Start mission endpoint accessed")
     

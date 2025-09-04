@@ -135,9 +135,9 @@ async def execute_pipeline() -> bool:
         
         # pipeline flow
         flow: List[Tuple[str, str, Optional[str]]] = [
-            ("openpasslite", "/start_mission", "LTT"),
-            # ("wildwings", "/start_mission", None),
-            ("openpasslite", "/start_mission", "RTB")
+            # ("openpasslite", "/start_mission", "LTT"),
+            ("wildwings", "/start", None),
+            # ("openpasslite", "/start_mission", "RTB")
         ]
         
         for service, endpoint, mission_name in flow:
