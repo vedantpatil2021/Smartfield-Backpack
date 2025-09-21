@@ -19,8 +19,8 @@ import matplotlib
 
 # User-defined mission parameters
 # 5 minutes is 300 seconds
-DURATION = 120 # duration in seconds
-# Set OpenCV backend for Docker environments
+DURATION = 60 # duration in seconds
+
 os.environ['OPENCV_VIDEOIO_PRIORITY_MSMF'] = '0'
 os.environ['QT_QPA_PLATFORM'] = 'xcb'
 os.environ['QT_X11_NO_MITSHM'] = '1'
@@ -116,7 +116,6 @@ model = YOLO('yolov5su')
 # Connect to the drone
 drone = sp.setup_drone("parrot_anafi", 1, "None")
 drone.connect()
-
 
 # wait for drone to stabilize
 time.sleep(5)

@@ -51,13 +51,12 @@ services:
       context: ./services/wildwings
       dockerfile: Dockerfile
     container_name: wildwings
-    network_mode: "host"
     ports:
       - "2199:2199"
     volumes:
       - ./config.toml:/app/config.toml:ro
       - ./logs:/app/logs:rw
-      - ./mission:/app/missions:rw
+      - ./mission:/app/mission:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     environment:
       - PYTHONPATH=/app
@@ -65,6 +64,8 @@ services:
       - CONDA_DEFAULT_ENV=wildwing
     devices:
       - /dev/dri:/dev/dri
+    networks:
+      - smartfield-network
     restart: unless-stopped
     privileged: true
     healthcheck:

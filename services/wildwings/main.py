@@ -40,7 +40,7 @@ def run_mission():
     try:
         is_running = True
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = f"missions/mission_record_{timestamp}"
+        output_dir = f"/app/mission/mission_record_{timestamp}"
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs("logs", exist_ok=True)
         

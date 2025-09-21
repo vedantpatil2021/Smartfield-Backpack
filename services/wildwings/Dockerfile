@@ -88,7 +88,7 @@ COPY . .
 # Set permissions for all app files and ensure droneuser can write to missions and logs directories
 RUN chown -R droneuser:droneuser /app && \
     chmod -R 777 /app && \
-    chmod -R 777 /app/missions /app/logs /app/mission
+    chmod -R 777 /app/logs /app/mission
 
 # Test olympe import
 RUN python -c "import olympe; print('Olympe imported successfully')"
@@ -97,8 +97,6 @@ USER droneuser
 
 EXPOSE 2199
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:2199/ || exit 1
 
 # Start Xvfb for video display and run the application
-CMD ["bash", "-c", "mkdir -p /app/logs /app/missions /app/mission && chmod -R 777 /app/logs /app/missions /app/mission && Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 & conda run -n wildwing python main.py"]
+CMD ["bash", "-c", "mkdir -p /app/logs /app/mission && Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 & conda run -n wildwing python main.py"]

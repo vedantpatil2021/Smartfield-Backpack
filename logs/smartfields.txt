@@ -1,0 +1,54 @@
+2025-09-16 20:15:39,222 - smartfields - INFO - SmartFields service starting up
+2025-09-16 20:16:08,442 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:16:38,608 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:17:08,751 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:17:38,889 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:18:09,049 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:18:39,190 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:18:57,530 - smartfields - INFO - Process initiation requested - lat: 40.00788092013576, lon: -83.01784213632345, camid: pi-001
+2025-09-16 20:18:57,530 - smartfields - INFO - Process initiated with camera_id: pi-001 and coordinates: lat=40.00788092013576, lon=-83.01784213632345
+2025-09-16 20:18:57,531 - smartfields - INFO - Starting pipeline execution
+2025-09-16 20:18:57,533 - smartfields - INFO - Starting pipeline execution
+2025-09-16 20:18:57,534 - smartfields - INFO - Using services: {'openpasslite': 'openpasslite:2177', 'wildwings': 'wildwings:2199'}
+2025-09-16 20:18:57,535 - smartfields - INFO - Starting wildwings/start with mission: None
+2025-09-16 20:19:09,333 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:19:27,593 - smartfields - ERROR - Error calling wildwings/start: HTTPConnectionPool(host='wildwings', port=2199): Read timed out.
+2025-09-16 20:19:27,594 - smartfields - ERROR - Failed to start wildwings
+2025-09-16 20:19:39,477 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:20:09,623 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:20:39,784 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:21:09,940 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:21:40,092 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:22:10,246 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:22:40,387 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:23:10,524 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:23:40,688 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:24:10,833 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:24:40,892 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:25:11,040 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:25:41,188 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:26:11,338 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:26:41,405 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:27:11,535 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:27:41,671 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:27:55,272 - smartfields - INFO - SmartFields service shutting down
+2025-09-16 20:28:20,769 - smartfields - INFO - SmartFields service starting up
+2025-09-16 20:28:50,009 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:29:20,163 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:29:50,303 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:30:20,445 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:30:50,593 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:31:20,743 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:31:42,608 - smartfields - INFO - Process initiation requested - lat: 40.00788092013576, lon: -83.01784213632345, camid: pi-001
+2025-09-16 20:31:42,608 - smartfields - INFO - Process initiated with camera_id: pi-001 and coordinates: lat=40.00788092013576, lon=-83.01784213632345
+2025-09-16 20:31:42,608 - smartfields - INFO - Starting pipeline execution
+2025-09-16 20:31:42,611 - smartfields - INFO - Starting pipeline execution
+2025-09-16 20:31:42,612 - smartfields - INFO - Using services: {'openpasslite': 'openpasslite:2177', 'wildwings': 'wildwings:2199'}
+2025-09-16 20:31:42,612 - smartfields - INFO - Starting wildwings/start with mission: None
+2025-09-16 20:31:50,805 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:32:12,668 - smartfields - ERROR - Error calling wildwings/start: HTTPConnectionPool(host='wildwings', port=2199): Read timed out.
+2025-09-16 20:32:12,669 - smartfields - ERROR - Failed to start wildwings
+2025-09-16 20:32:20,953 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:32:51,111 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:33:21,257 - smartfields - INFO - Root endpoint accessed
+2025-09-16 20:33:41,344 - smartfields - INFO - SmartFields service shutting down

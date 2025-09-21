@@ -84,7 +84,4 @@ USER droneuser
 
 EXPOSE 2177
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:2177/ || exit 1
-
 CMD ["python3", "main.py"]

@@ -1,0 +1,22 @@
+2025-09-16 20:15:38,735 - mqtt_subscriber - INFO - Connected to MQTT broker.
+2025-09-16 20:15:38,735 - mqtt_subscriber - INFO - Subscribing to topic: cameratrap/events
+2025-09-16 20:18:57,518 - mqtt_subscriber - INFO - Received event from topic cameratrap/events:
+{
+  "event_type": "DETECTION",
+  "uuid": "123",
+  "classification": {
+    "species": "bird"
+  }
+}
+2025-09-16 20:18:57,536 - mqtt_subscriber - INFO - Triggered SmartFields pipeline for pi-001 at (40.00788092013576, -83.01784213632345)
+2025-09-16 20:28:20,263 - mqtt_subscriber - INFO - Connected to MQTT broker.
+2025-09-16 20:28:20,263 - mqtt_subscriber - INFO - Subscribing to topic: cameratrap/events
+2025-09-16 20:31:42,596 - mqtt_subscriber - INFO - Received event from topic cameratrap/events:
+{
+  "event_type": "DETECTION",
+  "uuid": "123",
+  "classification": {
+    "species": "bird"
+  }
+}
+2025-09-16 20:31:42,613 - mqtt_subscriber - INFO - Triggered SmartFields pipeline for pi-001 at (40.00788092013576, -83.01784213632345)
