@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 IN_DOCKER = os.environ.get('IN_DOCKER', 'false').lower() == 'true' or os.path.exists('/.dockerenv')
 
 # User-defined mission parameters
-DURATION = 20  # duration in seconds
+DURATION = 60  # duration in seconds
 
 # Retrieve the filename from command-line arguments
 if len(sys.argv) < 2:
@@ -128,7 +128,7 @@ class Tracker:
                         logger.error(f"Failed to save telemetry: {e}")
 
                     # Uncomment to enable drone movement
-                    # self.drone.piloting.move_by(x_direction, y_direction, z_direction, 0)
+                    self.drone.piloting.move_by(x_direction, y_direction, z_direction, 0)
 
                 if yuv_frame is not None:
                     yuv_frame.unref()
@@ -203,8 +203,8 @@ try:
     drone.camera.media.stop_recording()
     
     # Download media
-    logger.info(f"Downloading media")
-    drone.camera.media.download_last_media()
+    # logger.info(f"Downloading media")
+    # drone.camera.media.download_last_media()
     
     # Uncomment for actual flight
     # logger.info("Landing drone")

@@ -24,7 +24,7 @@ fi
 
 
 # Run the Python script with live output to wildwings.txt
-python3 controller.py "$output_dir" 2>&1 | tee -a logs/wildwings.txt
+python3 controller.py "$output_dir" 2>&1 | tee -a logs/wildwings.log
 
 # Log completion
-echo "$(date): WildWings mission completed" | tee -a logs/wildwings.txt
+echo "$(date): WildWings mission completed" | tee -a logs/wildwings.log

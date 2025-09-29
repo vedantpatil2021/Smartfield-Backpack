@@ -4,6 +4,7 @@ import threading
 import subprocess
 import datetime
 import os
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -28,7 +29,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("wildwings")
 
-# Global mission state
+# Global mission state with thread safety
+mission_lock = threading.Lock()
 mission_thread = None
 stop_mission_flag = threading.Event()
 current_process = None
@@ -38,6 +40,14 @@ logs = []
 def run_mission_background():
     """Execute mission in background thread"""
     global stop_mission_flag, current_process, is_running, logs
+
+    with mission_lock:
+        if is_running:
+            logger.warning("Mission already running")
+            return
+        is_running = True
+        stop_mission_flag.clear()
+
     try:
         if stop_mission_flag.is_set():
             logger.info("Mission stopped before execution")
@@ -61,44 +71,46 @@ def run_mission_background():
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
 
-        current_process = subprocess.Popen(
-            ["bash", str(script_path)],
-            cwd="/app",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            bufsize=1,
-            env=env
-        )
+        with mission_lock:
+            current_process = subprocess.Popen(
+                ["bash", str(script_path)],
+                cwd="/app",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1,
+                env=env
+            )
 
-        is_running = True
         logger.info("Mission subprocess started successfully")
 
         # Stream output in real-time
         for line in iter(current_process.stdout.readline, ''):
             if stop_mission_flag.is_set():
                 logger.info("Stop signal received, terminating mission")
-                current_process.terminate()
+                with mission_lock:
+                    if current_process:
+                        current_process.terminate()
                 break
 
             if line.strip():
                 log_entry = f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {line.strip()}"
-                logs.append(log_entry)
+                with mission_lock:
+                    logs.append(log_entry)
                 logger.info(f"Mission output: {line.strip()}")
 
-                # Keep only last 1000 log entries
-                if len(logs) > 1000:
-                    logs = logs[-1000:]
-
-        current_process.wait()
-        logger.info(f"Mission completed with return code: {current_process.returncode}")
+        with mission_lock:
+            if current_process:
+                current_process.wait()
+                logger.info(f"Mission completed with return code: {current_process.returncode}")
 
     except Exception as e:
         logger.error(f"Mission failed: {str(e)}")
     finally:
-        is_running = False
-        current_process = None
-        stop_mission_flag.clear()
+        with mission_lock:
+            is_running = False
+            current_process = None
+            stop_mission_flag.clear()
         logger.info("Mission thread finished")
 
 @asynccontextmanager
@@ -106,13 +118,35 @@ async def lifespan(app: FastAPI):
     logger.info("WildWings service starting up")
     yield
     logger.info("WildWings service shutting down")
+
     global mission_thread, stop_mission_flag, current_process, is_running
-    if mission_thread and mission_thread.is_alive():
-        logger.info("Stopping running mission during shutdown")
-        stop_mission_flag.set()
-        if current_process:
-            current_process.terminate()
-        mission_thread.join(timeout=5.0)
+
+    with mission_lock:
+        if mission_thread and mission_thread.is_alive():
+            logger.info("Stopping running mission during shutdown")
+            stop_mission_flag.set()
+
+            if current_process:
+                try:
+                    current_process.terminate()
+                    current_process.wait(timeout=5)
+                    logger.info("Process terminated gracefully")
+                except subprocess.TimeoutExpired:
+                    logger.warning("Process didn't terminate gracefully, forcing kill")
+                    current_process.kill()
+                    try:
+                        current_process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        logger.error("Process couldn't be killed")
+                except Exception as e:
+                    logger.error(f"Error terminating process: {e}")
+
+        # Wait for thread with timeout
+        if mission_thread:
+            mission_thread.join(timeout=10.0)
+            if mission_thread.is_alive():
+                logger.warning("Mission thread didn't finish within timeout")
+
         is_running = False
 
 app = FastAPI(
@@ -141,9 +175,20 @@ async def start_mission():
 
     global mission_thread, stop_mission_flag, is_running
 
-    if mission_thread and mission_thread.is_alive():
-        logger.error("Mission already running")
-        raise HTTPException(status_code=400, detail="Mission already running")
+    with mission_lock:
+        if mission_thread and mission_thread.is_alive():
+            logger.warning("Mission request rejected - mission already running")
+            raise HTTPException(
+                status_code=409,
+                detail="Mission is currently running. Please wait for it to complete."
+            )
+
+        if is_running:
+            logger.warning("Mission request rejected - mission state indicates running")
+            raise HTTPException(
+                status_code=409,
+                detail="Mission is currently running. Please wait for it to complete."
+            )
 
     try:
         # Clear any previous stop flag and start new mission
@@ -171,13 +216,15 @@ async def stop_mission():
 
     global mission_thread, stop_mission_flag, current_process, is_running
 
-    if not mission_thread or not mission_thread.is_alive():
-        logger.info("No mission currently running")
-        return {
-            "status": "success",
-            "message": "No mission currently running",
-            "was_running": False
-        }
+    with mission_lock:
+        if not mission_thread or not mission_thread.is_alive():
+            if not is_running:
+                logger.info("No mission currently running")
+                return {
+                    "status": "success",
+                    "message": "No mission currently running",
+                    "was_running": False
+                }
 
     try:
         # Set stop flag
@@ -185,18 +232,22 @@ async def stop_mission():
         logger.info("Stop mission flag set")
 
         # Terminate the process if it exists
-        if current_process:
-            logger.info("Terminating current process")
-            current_process.terminate()
-
-            # Wait a bit for graceful termination
-            try:
-                current_process.wait(timeout=5)
-                logger.info("Process terminated gracefully")
-            except subprocess.TimeoutExpired:
-                logger.warning("Process didn't terminate gracefully, forcing kill")
-                current_process.kill()
-                current_process.wait()
+        with mission_lock:
+            if current_process:
+                logger.info("Terminating current process")
+                try:
+                    current_process.terminate()
+                    current_process.wait(timeout=5)
+                    logger.info("Process terminated gracefully")
+                except subprocess.TimeoutExpired:
+                    logger.warning("Process didn't terminate gracefully, forcing kill")
+                    current_process.kill()
+                    try:
+                        current_process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        logger.error("Process couldn't be killed")
+                except Exception as e:
+                    logger.error(f"Error terminating process: {e}")
 
         # Wait for mission thread to finish
         if mission_thread and mission_thread.is_alive():
@@ -206,7 +257,8 @@ async def stop_mission():
                 logger.warning("Mission thread didn't finish within timeout")
 
         # Update state
-        is_running = False
+        with mission_lock:
+            is_running = False
 
         logger.info("Mission stopped successfully")
         return {
@@ -218,33 +270,38 @@ async def stop_mission():
     except Exception as e:
         logger.error(f"Failed to stop mission: {str(e)}")
         # Still try to clean up state even if stopping failed
-        is_running = False
-        stop_mission_flag.set()
-        return {
-            "status": "error",
-            "message": f"Error stopping mission: {str(e)}",
-            "was_running": True
-        }
+        with mission_lock:
+            is_running = False
+            stop_mission_flag.set()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error stopping mission: {str(e)}"
+        )
 
 @app.get("/mission_status")
 async def mission_status():
     global mission_thread, stop_mission_flag, is_running, logs
 
-    if mission_thread and mission_thread.is_alive():
-        status = "running"
-        if stop_mission_flag.is_set():
-            status = "stopping"
-    else:
-        status = "idle"
+    with mission_lock:
+        if mission_thread and mission_thread.is_alive():
+            status = "running"
+            if stop_mission_flag.is_set():
+                status = "stopping"
+        else:
+            status = "idle"
 
-    recent_logs = logs[-10:] if len(logs) > 10 else logs
+        recent_logs = logs[-10:] if len(logs) > 10 else logs.copy()
+        total_logs = len(logs)
+        thread_alive = mission_thread.is_alive() if mission_thread else False
+        stop_requested = stop_mission_flag.is_set()
+        running_state = is_running
 
     return {
         "status": status,
-        "thread_alive": mission_thread.is_alive() if mission_thread else False,
-        "stop_requested": stop_mission_flag.is_set(),
-        "is_running": is_running,
-        "total_logs": len(logs),
+        "thread_alive": thread_alive,
+        "stop_requested": stop_requested,
+        "is_running": running_state,
+        "total_logs": total_logs,
         "recent_logs": recent_logs
     }
 
@@ -259,7 +316,9 @@ async def get_logs(lines: int = 100):
 
         if not Path(log_file_path).exists():
             logger.warning(f"Log file not found at: {log_file_path}")
-            return {"logs": ["Log file not found"], "total_lines": 0, "runtime_logs": logs[-lines:]}
+            with mission_lock:
+                runtime_logs = logs[-lines:] if len(logs) > lines else logs.copy()
+            return {"logs": ["Log file not found"], "total_lines": 0, "runtime_logs": runtime_logs}
 
         with open(log_file_path, 'r') as f:
             all_lines = f.readlines()
@@ -269,23 +328,27 @@ async def get_logs(lines: int = 100):
 
         # Clean up the lines and return as list
         file_logs = [line.strip() for line in recent_lines if line.strip()]
-        runtime_logs = logs[-lines:] if len(logs) > lines else logs
+
+        with mission_lock:
+            runtime_logs = logs[-lines:] if len(logs) > lines else logs.copy()
+            total_runtime_logs = len(logs)
 
         logger.info(f"Returning {len(file_logs)} file log lines and {len(runtime_logs)} runtime log lines")
         return {
             "logs": file_logs,
             "total_lines": len(all_lines),
             "runtime_logs": runtime_logs,
-            "total_runtime_logs": len(logs)
+            "total_runtime_logs": total_runtime_logs
         }
 
     except Exception as e:
         logger.error(f"Failed to read logs: {str(e)}")
-        return {
-            "logs": [f"Error reading logs: {str(e)}"],
-            "total_lines": 0,
-            "runtime_logs": logs[-lines:] if logs else []
-        }
+        with mission_lock:
+            runtime_logs = logs[-lines:] if logs else []
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read logs: {str(e)}"
+        )
 
 if __name__ == "__main__":
     uvicorn.run(

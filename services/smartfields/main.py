@@ -180,9 +180,9 @@ async def execute_pipeline() -> bool:
 
         # pipeline flow with retry mechanism
         flow: List[Tuple[str, str, Optional[str], int]] = [
-            ("openpasslite", "/start_mission", "TAKEOFF", 2),  # service, endpoint, mission, max_retries
-            # ("wildwings", "/start_mission", None, 2),
-            ("openpasslite", "/start_mission", "LAND", 2)
+            # ("openpasslite", "/start_mission", "TAKEOFF", 2),  # service, endpoint, mission, max_retries
+            ("wildwings", "/start_mission", None, 1),
+            # ("openpasslite", "/start_mission", "LAND", 2)
         ]
 
         for service, endpoint, mission_name, max_retries in flow:
