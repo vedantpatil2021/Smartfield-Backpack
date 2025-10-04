@@ -13,9 +13,6 @@ def run(drone, lat=None, long=None):
         raise Exception(f"Invalid coordinates: lat={lat}, long={long}")
 
     try:
-        print("=== WAITING FOR GPS STABILIZATION ===")
-        time.sleep(10)
-
         print("=== CHECKING GPS STATUS ===")
         coordinates = drone.get_drone_coordinates()
         if not coordinates or coordinates[0] == 0.0 or coordinates[1] == 0.0:
@@ -28,6 +25,10 @@ def run(drone, lat=None, long=None):
         print("✓ Takeoff completed")
 
         print("=== STABILIZING AFTER TAKEOFF ===")
+        time.sleep(5)
+
+        print("=== CHANGING THE DRONE GIMBAL MOTION ===")
+        drone.camera.controls.set_orientation(0, -90, 0, wait=True)
         time.sleep(5)
 
         print(f"=== NAVIGATING TO TARGET ===")
