@@ -128,8 +128,8 @@ class Tracker:
                         logger.error(f"Failed to save telemetry: {e}")
 
                     # Uncomment to enable drone movement
-                    logger.info(f"coodinated print: {x_direction, y_direction, z_direction, 0}")
-                    # self.drone.piloting.move_by(x_direction, y_direction, z_direction, 0)
+                    logger.info(f"Coodinate/Direction : {x_direction, y_direction, z_direction, 0}")
+                    self.drone.piloting.move_by(x_direction, y_direction, z_direction, 0)
 
                 if yuv_frame is not None:
                     yuv_frame.unref()
@@ -210,21 +210,14 @@ try:
     logger.info("=" * 60)
     drone.camera.media.stop_recording()
 
-    # Download media
-    # logger.info(f"Downloading media")
-    # drone.camera.media.download_last_media()
-
-    # Uncomment for actual flight
-    # logger.info("Landing drone")
-    # drone.piloting.land()
-
     # Disconnect
     logger.info("=" * 60)
     logger.info("Disconnecting drone")
     logger.info("=" * 60)
     drone.disconnect()
+    time.sleep(15)
     logger.info("=" * 60)
-    logger.info("Mission completed successfully")
+    logger.info("Mission Completed")
     logger.info("=" * 60)
     
 except Exception as e:
