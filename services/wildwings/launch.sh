@@ -26,5 +26,13 @@ fi
 # Run the Python script with live output to wildwings.log
 python3 controller.py "$output_dir" 2>&1 | tee -a logs/wildwings.log
 
-# Log completion
-echo "$(date): WildWings mission completed" | tee -a logs/wildwings.log
+# Capture the exit code from python script
+EXIT_CODE=${PIPESTATUS[0]}
+
+# Log completion with exit code
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "$(date): WildWings mission completed successfully" | tee -a logs/wildwings.log
+else
+    echo "$(date): WildWings mission failed with exit code $EXIT_CODE" | tee -a logs/wildwings.log
+    exit $EXIT_CODE
+fi

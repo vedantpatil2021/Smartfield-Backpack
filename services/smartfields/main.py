@@ -4,21 +4,22 @@ import time
 import aiohttp
 import threading
 import asyncio
-import os
-from typing import Optional, Dict, List, Tuple
+from typing import Optional
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 import uvicorn
-from pathlib import Path
 
+# Load configuration
 config_path = Path("/app/config.toml")
 if not config_path.exists():
     config_path = Path(__file__).parent.parent.parent / "config.toml"
 config = toml.load(config_path)
 smartfields_config = config["smartfields"]
 
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -29,7 +30,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("smartfields")
 
-# Global state with thread safety
+# Global pipeline state with thread safety
 pipeline_lock = threading.Lock()
 lat = None
 lon = None
@@ -38,22 +39,34 @@ pipeline_stop_event = asyncio.Event()
 pipeline_task = None
 
 def get_services():
+    """Get service URLs from environment or defaults"""
     return {
-        "openpasslite": os.getenv("OPENPASSLITE_URL", "openpasslite:2177"),
-        "wildwings": os.getenv("WILDWINGS_URL", "wildwings:2199")
+        "openpasslite": "localhost:2177",
+        "wildwings": "localhost:2199"
     }
 
-async def call_service(services: Dict[str, str], service_name: str, endpoint: str, mission_name: Optional[str] = None) -> bool:
+def get_log_paths():
+    """Get log paths from config"""
+    try:
+        base_log_dir = Path(smartfields_config.get("log_directory", "logs"))
+        return {
+            "openpasslite": base_log_dir / "openpasslite.log",
+            "wildwings": base_log_dir / "wildwings.log"
+        }
+    except Exception:
+        return {
+            "openpasslite": Path("logs/openpasslite.log"),
+            "wildwings": Path("logs/wildwings.log")
+        }
+
+async def call_service(services: dict, service_name: str, endpoint: str, mission_name: Optional[str] = None) -> bool:
+    """Call a service endpoint"""
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
         try:
             url = f"http://{services[service_name]}{endpoint}"
 
             if service_name == "openpasslite" and endpoint == "/start_mission":
-                params = {
-                    'name': mission_name,
-                    'lat': lat,
-                    'long': lon  # Note: openpasslite expects 'long' not 'lon'
-                }
+                params = {'name': mission_name, 'lat': lat, 'long': lon}
                 async with session.post(url, params=params) as response:
                     status_code = response.status
                     response_text = await response.text()
@@ -66,6 +79,7 @@ async def call_service(services: Dict[str, str], service_name: str, endpoint: st
             if status_code != 200:
                 logger.warning(f"Service {service_name} response: {response_text}")
             return status_code == 200
+
         except asyncio.TimeoutError:
             logger.error(f"Timeout calling {service_name}{endpoint}")
             return False
@@ -73,27 +87,11 @@ async def call_service(services: Dict[str, str], service_name: str, endpoint: st
             logger.error(f"Error calling {service_name}{endpoint}: {e}")
             return False
 
-def get_log_paths():
-    """Get log paths from config or use defaults"""
-    try:
-        # Try to get from config first
-        base_log_dir = Path(smartfields_config.get("log_directory", "logs"))
-        return {
-            "openpasslite": base_log_dir / "openpasslite.log",
-            "wildwings": base_log_dir / "wildwings.log"
-        }
-    except Exception:
-        # Fallback to relative paths
-        return {
-            "openpasslite": Path("logs/openpasslite.log"),
-            "wildwings": Path("logs/wildwings.log")
-        }
-
-async def wait_for_completion(services: Dict[str, str], service_name: str, mission_name: str) -> bool:
+async def wait_for_completion(services: dict, service_name: str, mission_name: str) -> bool:
+    """Wait for mission completion by monitoring log file"""
     logger.info(f"Waiting for {service_name} mission {mission_name} to complete...")
 
     log_paths = get_log_paths()
-
     if service_name not in log_paths:
         logger.error(f"No log path configured for service: {service_name}")
         return False
@@ -109,7 +107,7 @@ async def wait_for_completion(services: Dict[str, str], service_name: str, missi
 
     start_time = time.time()
     timeout = 180
-    max_wait_for_log = 30  # Wait max 30 seconds for log file to appear
+    max_wait_for_log = 30
 
     # Wait for log file to appear
     log_wait_start = time.time()
@@ -124,6 +122,7 @@ async def wait_for_completion(services: Dict[str, str], service_name: str, missi
 
         await asyncio.sleep(2)
 
+    # Monitor log file for completion
     while not pipeline_stop_event.is_set():
         try:
             current_size = log_file_path.stat().st_size
@@ -133,20 +132,31 @@ async def wait_for_completion(services: Dict[str, str], service_name: str, missi
                     f.seek(initial_size)
                     new_content = f.read()
 
+                    # Check for failure patterns
+                    failure_patterns = [
+                        f"Mission {mission_name} failed:",
+                        "Mission failed:",
+                        "Mission thread finished with errors",
+                        "AssertionError",
+                        "connection timed out",
+                        "Mission process exited with return code:"
+                    ]
+                    for pattern in failure_patterns:
+                        if pattern in new_content:
+                            logger.error(f"{service_name} mission {mission_name} failed - detected: {pattern}")
+                            return False
+
+                    # Check for successful completion
                     if completion_pattern in new_content:
+                        completion_index = new_content.find(completion_pattern)
+                        after_completion = new_content[completion_index:]
+
+                        if "finished with errors" in after_completion:
+                            logger.error(f"{service_name} mission {mission_name} finished with errors")
+                            return False
+
                         logger.info(f"{service_name} mission {mission_name} completed successfully")
                         return True
-
-                    mission_failure_patterns = [
-                        f"Mission {mission_name} failed:",
-                        f"Mission failed:",
-                        f"ERROR - Mission {mission_name}",
-                        f"FAILED - Mission {mission_name}"
-                    ]
-                    for pattern in mission_failure_patterns:
-                        if pattern in new_content:
-                            logger.error(f"{service_name} mission {mission_name} failed")
-                            return False
 
                 initial_size = current_size
 
@@ -163,6 +173,7 @@ async def wait_for_completion(services: Dict[str, str], service_name: str, missi
     return False
 
 async def execute_pipeline() -> bool:
+    """Execute the mission pipeline: TAKEOFF -> WildWings -> LAND"""
     global pipeline_running, pipeline_stop_event
 
     with pipeline_lock:
@@ -178,55 +189,63 @@ async def execute_pipeline() -> bool:
         services = get_services()
         logger.info(f"Using services: {services}")
 
-        # pipeline flow with retry mechanism
-        flow: List[Tuple[str, str, Optional[str], int]] = [
-            # ("openpasslite", "/start_mission", "TAKEOFF", 2),  # service, endpoint, mission, max_retries
-            ("wildwings", "/start_mission", None, 1),
-            # ("openpasslite", "/start_mission", "LAND", 2)
+        # Pipeline flow: [(service, endpoint, mission_name)]
+        flow = [
+            ("openpasslite", "/start_mission", "TAKEOFF"),
+            ("wildwings", "/start_mission", None),
+            ("openpasslite", "/start_mission", "LAND")
         ]
 
-        for service, endpoint, mission_name, max_retries in flow:
+        for idx, (service, endpoint, mission_name) in enumerate(flow):
             if pipeline_stop_event.is_set():
                 logger.info("Pipeline stop requested, aborting execution")
                 return False
 
             logger.info(f"Starting {service}{endpoint} with mission: {mission_name}")
 
-            # Retry logic for service calls
-            service_success = False
-            for attempt in range(max_retries + 1):
-                if pipeline_stop_event.is_set():
-                    logger.info("Pipeline stop requested during service call")
+            # Call service
+            if not await call_service(services, service, endpoint, mission_name):
+                logger.error(f"Failed to start {service}")
+                # If first mission fails, stop pipeline
+                if idx == 0:
+                    logger.error(f"First mission ({mission_name}) failed, aborting pipeline")
                     return False
-
-                if await call_service(services, service, endpoint, mission_name):
-                    service_success = True
-                    break
-                else:
-                    if attempt < max_retries:
-                        logger.warning(f"Service {service} failed, retrying ({attempt + 1}/{max_retries})")
-                        await asyncio.sleep(5)
-                    else:
-                        logger.error(f"Service {service} failed after {max_retries + 1} attempts")
-
-            if not service_success:
-                logger.error(f"Failed to start {service} after all retries")
+                # If second mission fails, continue to third
+                elif idx == 1:
+                    logger.warning(f"Second mission ({mission_name}) failed, proceeding to next mission")
+                    continue
                 return False
 
-            # Wait for completion with stop check
+            # Wait for completion
             if not await wait_for_completion(services, service, mission_name):
                 logger.error(f"{service} mission {mission_name} failed or was stopped")
+                # If first mission fails, stop pipeline
+                if idx == 0:
+                    logger.error(f"First mission ({mission_name}) failed, aborting pipeline")
+                    return False
+                # If second mission fails, continue to third
+                elif idx == 1:
+                    logger.warning(f"Second mission ({mission_name}) failed, proceeding to next mission")
+                    continue
                 return False
 
             logger.info(f"{service} mission {mission_name} completed successfully")
 
-            # Interruptible wait between missions
-            logger.info("Waiting 30 seconds before next mission...")
-            for _ in range(30):
-                if pipeline_stop_event.is_set():
-                    logger.info("Pipeline stop requested during inter-mission wait")
-                    return False
-                await asyncio.sleep(1)
+            # Wait between missions (except after TAKEOFF to keep drone flying)
+            if not (service == "openpasslite" and mission_name == "TAKEOFF"):
+                logger.info("Waiting 10 seconds before next mission...")
+                for _ in range(10):
+                    if pipeline_stop_event.is_set():
+                        logger.info("Pipeline stop requested during wait")
+                        return False
+                    await asyncio.sleep(1)
+            else:
+                logger.info("Waiting 3 seconds before wildwings...")
+                for _ in range(3):
+                    if pipeline_stop_event.is_set():
+                        logger.info("Pipeline stop requested during wait")
+                        return False
+                    await asyncio.sleep(1)
 
         logger.info("Pipeline completed successfully")
         return True
@@ -250,6 +269,7 @@ async def lifespan(app: FastAPI):
     logger.info("SmartFields service shutting down")
 
     global pipeline_running, pipeline_stop_event, pipeline_task
+
     with pipeline_lock:
         if pipeline_running:
             logger.info("Stopping pipeline during shutdown")
@@ -270,7 +290,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[smartfields_config["cors_origin"]],
@@ -290,34 +309,29 @@ async def initiate_process(
     lon: float = Query(..., description="Longitude coordinate"),
     camid: Optional[str] = Query(None, description="Camera trap ID")
 ):
+    """Initiate the pipeline with coordinates"""
     global pipeline_running, pipeline_task
 
     logger.info(f"Process initiation requested - lat: {lat}, lon: {lon}, camid: {camid}")
 
     with pipeline_lock:
         if pipeline_running:
-            logger.warning('Pipeline request rejected - pipeline already running')
-            raise HTTPException(
-                status_code=409,
-                detail="Pipeline is currently running. Please wait for it to complete."
-            )
+            logger.warning("Pipeline request rejected - pipeline already running")
+            raise HTTPException(status_code=409, detail="Pipeline is currently running")
 
     try:
         float(lat)
         float(lon)
     except ValueError:
-        logger.error(f'Invalid coordinates: lat={lat}, lon={lon}')
-        raise HTTPException(
-            status_code=400,
-            detail="lat and lon must be valid numbers"
-        )
+        logger.error(f"Invalid coordinates: lat={lat}, lon={lon}")
+        raise HTTPException(status_code=400, detail="lat and lon must be valid numbers")
 
     globals()['lat'] = lat
     globals()['lon'] = lon
 
-    logger.info(f'Process initiated with camera_id: {camid} and coordinates: lat={lat}, lon={lon}')
+    logger.info(f"Process initiated with camera_id: {camid} and coordinates: lat={lat}, lon={lon}")
+    logger.info("Starting pipeline execution")
 
-    logger.info('Starting pipeline execution')
     pipeline_task = asyncio.create_task(run_pipeline_async())
 
     return {
@@ -329,6 +343,7 @@ async def initiate_process(
 
 @app.get("/logs", response_class=HTMLResponse)
 async def view_logs():
+    """View logs in HTML format"""
     try:
         log_file = Path(smartfields_config["logfile_path"])
         if log_file.exists():
@@ -343,6 +358,7 @@ async def view_logs():
 
 @app.get("/pipeline_status")
 async def pipeline_status():
+    """Get pipeline status"""
     with pipeline_lock:
         return {
             "pipeline_running": pipeline_running,
@@ -353,9 +369,9 @@ async def pipeline_status():
 
 @app.get("/health")
 async def health_check():
+    """Health check endpoint"""
     try:
         services = get_services()
-
         with pipeline_lock:
             return {
                 "status": "healthy",
@@ -369,7 +385,9 @@ async def health_check():
 
 @app.post("/stop_pipeline")
 async def stop_pipeline():
+    """Stop the pipeline"""
     global pipeline_running, pipeline_stop_event, pipeline_task
+
     logger.info("Stop pipeline endpoint accessed")
 
     with pipeline_lock:
@@ -381,11 +399,10 @@ async def stop_pipeline():
                 "pipeline_running": False
             }
 
-        # Stop the pipeline
         pipeline_stop_event.set()
         logger.info("Pipeline stop signal sent")
 
-    # Get services and attempt to stop them
+    # Stop all services
     services = get_services()
     stopped_services = []
     failed_services = []
@@ -397,15 +414,15 @@ async def stop_pipeline():
                 async with session.post(url) as response:
                     if response.status == 200:
                         stopped_services.append(service_name)
-                        logger.info(f'Successfully stopped {service_name}')
+                        logger.info(f"Successfully stopped {service_name}")
                     else:
                         failed_services.append(service_name)
-                        logger.warning(f'Failed to stop {service_name}: {response.status}')
+                        logger.warning(f"Failed to stop {service_name}: {response.status}")
             except Exception as e:
                 failed_services.append(service_name)
-                logger.warning(f'Error stopping {service_name}: {e}')
+                logger.warning(f"Error stopping {service_name}: {e}")
 
-    # Cancel the pipeline task if it exists
+    # Cancel pipeline task
     if pipeline_task and not pipeline_task.done():
         pipeline_task.cancel()
         try:

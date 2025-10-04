@@ -66,6 +66,7 @@ RUN apt-get update && apt-get install -y \
     wireless-tools \
     net-tools \
     iproute2 \
+    conntrack \
     && rm -rf /var/lib/apt/lists/*
 
 ENV LD_LIBRARY_PATH=/usr/local/lib/python3.10/dist-packages/olympe_deps:/usr/local/lib:$LD_LIBRARY_PATH

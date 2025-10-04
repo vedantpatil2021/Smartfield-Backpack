@@ -12,6 +12,8 @@ RUN apk add --no-cache \
     linux-headers \
     libffi-dev \
     openssl-dev \
+    iproute2 \
+    conntrack-tools \
     && pip install --upgrade pip setuptools wheel
 
 COPY requirements.txt .
