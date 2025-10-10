@@ -1,18 +1,15 @@
-import json
-import csv
-from pathlib import Path
 import time
 
 def run(drone, lat=None, long=None):
-    mission_dir = Path(__file__).parent
-    config_path = mission_dir / "config.json"
-    csv_path = mission_dir / "data.csv"
-        
+    """
+    Execute landing mission.
+    Note: drone.connect() is already called in main.py
+    Note: drone.disconnect() is handled by main.py
+    """
     try:
-        drone.connect()
         drone.piloting.land()
-        drone.disconnect()
+        time.sleep(5)
 
     except Exception as e:
-        print(f"Takeoff mission failed: {e}")
+        print(f"Landing mission failed: {e}")
         raise

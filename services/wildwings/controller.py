@@ -8,7 +8,7 @@ import navigation as navigation
 import sys
 import json
 import time
-import csv 
+import csv
 import os
 import datetime
 import logging
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 IN_DOCKER = os.environ.get('IN_DOCKER', 'false').lower() == 'true' or os.path.exists('/.dockerenv')
 
 # User-defined mission parameters
-DURATION = 60  # duration in seconds
+DURATION = 25  # duration in seconds
 
 # Retrieve the filename from command-line arguments
 if len(sys.argv) < 2:
@@ -128,6 +128,7 @@ class Tracker:
                         logger.error(f"Failed to save telemetry: {e}")
 
                     # Uncomment to enable drone movement
+                    logger.info(f"Coodinate/Direction : {x_direction, y_direction, z_direction, 0}")
                     self.drone.piloting.move_by(x_direction, y_direction, z_direction, 0)
 
                 if yuv_frame is not None:
@@ -145,41 +146,44 @@ class Tracker:
 
 # Main execution
 try:
+    time.sleep(3)
     # Setup drone
     logger.info("Setting up drone connection")
     sp = SoftwarePilot()
-    
+
     # Load YOLO model
     logger.info("Loading YOLO model")
     model = YOLO('yolov5su')
-    
-    # Connect to drone
+
+    # Connect to drone (drone should be flying from TAKEOFF mission)
     drone = sp.setup_drone("parrot_anafi", 1, "None")
     drone.connect()
+    logger.info("=" * 60)
     logger.info("Drone connected")
-    
-    # Uncomment for actual flight
-    # logger.info("Taking off")
-    # drone.piloting.takeoff()
-    
+    logger.info("=" * 60)
+
     # Wait for stabilization
-    time.sleep(5)
-    
+    time.sleep(3)
+
     # Create tracker
     tracker = Tracker(drone, model)
-    
+
     # Setup and start recording
+    logger.info("=" * 60)
     logger.info("Starting recording")
+    logger.info("=" * 60)
     drone.camera.media.setup_recording()
     drone.camera.media.start_recording()
-    
+
     time.sleep(5)
-    
+
     # Start stream with tracking
+    logger.info("=" * 60)
     logger.info("Starting video stream")
+    logger.info("=" * 60)
     drone.camera.media.setup_stream(yuv_frame_processing=tracker.track)
     drone.camera.media.start_stream()
-    
+
     # Setup OpenCV window (only if not in Docker or if display is available)
     if not IN_DOCKER or os.environ.get('DISPLAY'):
         try:
@@ -189,35 +193,36 @@ try:
             logger.info("OpenCV window created")
         except Exception as e:
             logger.warning(f"Could not create OpenCV window (running headless): {e}")
-    
+
     # Run for specified duration
     logger.info(f"Running mission for {DURATION} seconds")
     time.sleep(DURATION)
-    
+
     # Stop stream
+    logger.info("=" * 60)
     logger.info("Stopping stream")
+    logger.info("=" * 60)
     drone.camera.media.stop_stream()
-    
+
     # Stop recording
+    logger.info("=" * 60)
     logger.info("Stopping recording")
+    logger.info("=" * 60)
     drone.camera.media.stop_recording()
-    
-    # Download media
-    # logger.info(f"Downloading media")
-    # drone.camera.media.download_last_media()
-    
-    # Uncomment for actual flight
-    # logger.info("Landing drone")
-    # drone.piloting.land()
-    
+
     # Disconnect
+    logger.info("=" * 60)
     logger.info("Disconnecting drone")
+    logger.info("=" * 60)
     drone.disconnect()
-    
-    logger.info("Mission completed successfully")
+    time.sleep(15)
+    logger.info("=" * 60)
+    logger.info("Mission Completed")
+    logger.info("=" * 60)
     
 except Exception as e:
     logger.error(f"Mission failed with error: {e}", exc_info=True)
+    cv2.destroyAllWindows()
     sys.exit(1)
 finally:
     cv2.destroyAllWindows()

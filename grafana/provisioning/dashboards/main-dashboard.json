@@ -1,0 +1,46 @@
+{
+  "title": "SmartField Dashboard",
+  "uid": "smartfield-main",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Live Stream",
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "html",
+        "content": "<script src=\"https://cdn.jsdelivr.net/npm/hls.js@latest\"></script><video id=\"video\" controls autoplay muted style=\"width:100%;height:100%;\"></video><script>var video=document.getElementById('video');var videoSrc='http://localhost:8888/drone/index.m3u8';if(Hls.isSupported()){var hls=new Hls();hls.loadSource(videoSrc);hls.attachMedia(video);}else if(video.canPlayType('application/vnd.apple.mpegurl')){video.src=videoSrc;}</script>"
+      }
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "Application Logs",
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "{job=\"smartfield\"}",
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
+        }
+      ]
+    }
+  ]
+}

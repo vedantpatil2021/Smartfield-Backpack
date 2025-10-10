@@ -17,7 +17,7 @@ scrape_configs:
 
         labels:
           job: smartfield
-          __path__: /var/log/app/*.txt
+          __path__: /var/log/app/*.log
 
     pipeline_stages:
       - regex:

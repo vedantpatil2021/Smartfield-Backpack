@@ -68,13 +68,33 @@ def auto_navigation(results):
     pxywh = pd.DataFrame((results[0].boxes.xywh).numpy(), columns = ('x', 'y','w', 'h'))
     px = px.join(pxywh)
 
+    # Increase bounding box size for better tracking (1.5x expansion)
+    expansion_factor = 1.5
+    px['w'] = px['w'] * expansion_factor
+    px['h'] = px['h'] * expansion_factor
+
+    # Recalculate corner coordinates based on expanded dimensions
+    px['x1'] = px['x'] - (px['w'] / 2)
+    px['y1'] = px['y'] - (px['h'] / 2)
+    px['x2'] = px['x'] + (px['w'] / 2)
+    px['y2'] = px['y'] + (px['h'] / 2)
+
     # calculate bounding box sizes in terms of pixel width and height
     bbox_sizes = []
     for b in results[0].boxes.xywh:
-        bbox_sizes.append((b[2], b[3])) # get width and height of bounding box
+        bbox_sizes.append((b[2] * expansion_factor, b[3] * expansion_factor)) # get width and height of bounding box
 
-    # get centroid of herd
-    centroid_herd = (px['x'].mean(), px['y'].mean())
+    # get centroid of single person (if multiple detections, use the largest/closest one)
+    if len(px) > 0:
+        # Find the largest bounding box (assuming closest person)
+        largest_idx = px['w'].idxmax()
+        centroid_person = (px.loc[largest_idx, 'x'], px.loc[largest_idx, 'y'])
+    else:
+        # Fallback to center if no detection
+        centroid_person = (results[0].orig_shape[1]/2, results[0].orig_shape[0]/2)
+
+    # Use single person centroid instead of herd centroid
+    centroid_herd = centroid_person
 
     image_shape_h, image_shape_w = results[0].orig_shape
     x_center_range = image_shape_w/2 - image_shape_w/8, image_shape_w/2 + image_shape_w/8
@@ -133,20 +153,8 @@ def auto_navigation(results):
         direction_y = 0
 
     # note: y-axis in image is actually z-axis in drone; y-axis in image is inverted (0,0 is top left corner)
-
-    if (centroid_herd[1] < y_center_range[0]) | (centroid_herd[1] > y_center_range[1]):
-        if (dif_y >= 0.0) & (y_min_herd >= bottom_range):
-            #print("z-axis: Move down")
-            direction_z = -z_dist # move down
-        elif (dif_y <= 0.0) & (y_max_herd <= bottom_range):
-            #print("z-axis: Move up")
-            direction_z = z_dist # move up
-        else:
-            #print("No movement in z-axis")
-            direction_z = 0
-    else:
-        #print("No movement in z-axis")
-        direction_z = 0
+    # Keep height constant at 13.0 meters - no vertical movement
+    direction_z = 0
 
     return  direction_x, direction_y, direction_z
 

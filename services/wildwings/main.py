@@ -2,23 +2,23 @@ import logging
 import toml
 import threading
 import subprocess
-import datetime
 import os
-from typing import Optional
+import time
+import sys
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
-from pathlib import Path
-import sys
 
+# Load configuration
 config_path = Path("/app/config.toml")
 if not config_path.exists():
     config_path = Path(__file__).parent.parent.parent / "config.toml"
 config = toml.load(config_path)
 wildwings_config = config["wildwings"]
 
-# Setup logging with live output
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -35,11 +35,10 @@ mission_thread = None
 stop_mission_flag = threading.Event()
 current_process = None
 is_running = False
-logs = []
 
 def run_mission_background():
     """Execute mission in background thread"""
-    global stop_mission_flag, current_process, is_running, logs
+    global stop_mission_flag, current_process, is_running
 
     with mission_lock:
         if is_running:
@@ -47,6 +46,8 @@ def run_mission_background():
             return
         is_running = True
         stop_mission_flag.clear()
+
+    mission_success = False
 
     try:
         if stop_mission_flag.is_set():
@@ -64,7 +65,6 @@ def run_mission_background():
         if not script_path.exists():
             raise FileNotFoundError(f"Launch script not found: {script_path}")
 
-        # Make script executable
         os.chmod(script_path, 0o755)
 
         # Run the launch script
@@ -84,34 +84,65 @@ def run_mission_background():
 
         logger.info("Mission subprocess started successfully")
 
-        # Stream output in real-time
+        # Stream output
         for line in iter(current_process.stdout.readline, ''):
             if stop_mission_flag.is_set():
                 logger.info("Stop signal received, terminating mission")
                 with mission_lock:
                     if current_process:
                         current_process.terminate()
+                mission_success = False
                 break
 
             if line.strip():
-                log_entry = f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {line.strip()}"
-                with mission_lock:
-                    logs.append(log_entry)
                 logger.info(f"Mission output: {line.strip()}")
 
         with mission_lock:
             if current_process:
                 current_process.wait()
-                logger.info(f"Mission completed with return code: {current_process.returncode}")
+                return_code = current_process.returncode
+                logger.info(f"Mission process exited with return code: {return_code}")
+
+                if return_code != 0:
+                    logger.error(f"Mission failed with return code: {return_code}")
+                    mission_success = False
+                else:
+                    logger.info("Mission completed successfully")
+                    mission_success = True
 
     except Exception as e:
         logger.error(f"Mission failed: {str(e)}")
+        mission_success = False
     finally:
+        # Cleanup process
         with mission_lock:
+            if current_process:
+                try:
+                    if current_process.poll() is None:
+                        logger.info("Terminating process...")
+                        current_process.terminate()
+                        try:
+                            current_process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            logger.warning("Process did not terminate, forcing kill...")
+                            current_process.kill()
+                            current_process.wait(timeout=2)
+                    logger.info("Process cleanup completed")
+                except Exception as cleanup_error:
+                    logger.error(f"Error during process cleanup: {cleanup_error}")
+
             is_running = False
             current_process = None
             stop_mission_flag.clear()
-        logger.info("Mission thread finished")
+
+        # Wait for connection cleanup
+        logger.info("Waiting for connection cleanup (5 seconds)...")
+        time.sleep(5)
+
+        if mission_success:
+            logger.info("Mission thread finished")
+        else:
+            logger.error("Mission thread finished with errors")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -141,13 +172,10 @@ async def lifespan(app: FastAPI):
                 except Exception as e:
                     logger.error(f"Error terminating process: {e}")
 
-        # Wait for thread with timeout
-        if mission_thread:
-            mission_thread.join(timeout=10.0)
-            if mission_thread.is_alive():
-                logger.warning("Mission thread didn't finish within timeout")
+    if mission_thread:
+        mission_thread.join(timeout=10.0)
 
-        is_running = False
+    is_running = False
 
 app = FastAPI(
     title="WildWings Service",
@@ -178,24 +206,18 @@ async def start_mission():
     with mission_lock:
         if mission_thread and mission_thread.is_alive():
             logger.warning("Mission request rejected - mission already running")
-            raise HTTPException(
-                status_code=409,
-                detail="Mission is currently running. Please wait for it to complete."
-            )
+            raise HTTPException(status_code=409, detail="Mission is currently running")
 
         if is_running:
             logger.warning("Mission request rejected - mission state indicates running")
-            raise HTTPException(
-                status_code=409,
-                detail="Mission is currently running. Please wait for it to complete."
-            )
+            raise HTTPException(status_code=409, detail="Mission is currently running")
 
     try:
-        # Clear any previous stop flag and start new mission
         stop_mission_flag.clear()
         mission_thread = threading.Thread(
             target=run_mission_background,
-            name="WildWings-Mission"
+            name="WildWings-Mission",
+            daemon=False
         )
         mission_thread.start()
 
@@ -208,7 +230,6 @@ async def start_mission():
     except Exception as e:
         logger.error(f"Failed to start mission: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to start mission: {str(e)}")
-    
 
 @app.post("/stop_mission")
 async def stop_mission():
@@ -227,11 +248,10 @@ async def stop_mission():
                 }
 
     try:
-        # Set stop flag
         stop_mission_flag.set()
         logger.info("Stop mission flag set")
 
-        # Terminate the process if it exists
+        # Terminate the process
         with mission_lock:
             if current_process:
                 logger.info("Terminating current process")
@@ -249,14 +269,11 @@ async def stop_mission():
                 except Exception as e:
                     logger.error(f"Error terminating process: {e}")
 
-        # Wait for mission thread to finish
+        # Wait for mission thread
         if mission_thread and mission_thread.is_alive():
             logger.info("Waiting for mission thread to finish")
             mission_thread.join(timeout=10)
-            if mission_thread.is_alive():
-                logger.warning("Mission thread didn't finish within timeout")
 
-        # Update state
         with mission_lock:
             is_running = False
 
@@ -269,18 +286,14 @@ async def stop_mission():
 
     except Exception as e:
         logger.error(f"Failed to stop mission: {str(e)}")
-        # Still try to clean up state even if stopping failed
         with mission_lock:
             is_running = False
             stop_mission_flag.set()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error stopping mission: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error stopping mission: {str(e)}")
 
 @app.get("/mission_status")
 async def mission_status():
-    global mission_thread, stop_mission_flag, is_running, logs
+    global mission_thread, stop_mission_flag, is_running
 
     with mission_lock:
         if mission_thread and mission_thread.is_alive():
@@ -290,8 +303,6 @@ async def mission_status():
         else:
             status = "idle"
 
-        recent_logs = logs[-10:] if len(logs) > 10 else logs.copy()
-        total_logs = len(logs)
         thread_alive = mission_thread.is_alive() if mission_thread else False
         stop_requested = stop_mission_flag.is_set()
         running_state = is_running
@@ -300,9 +311,7 @@ async def mission_status():
         "status": status,
         "thread_alive": thread_alive,
         "stop_requested": stop_requested,
-        "is_running": running_state,
-        "total_logs": total_logs,
-        "recent_logs": recent_logs
+        "is_running": running_state
     }
 
 @app.get("/logs")
@@ -310,45 +319,24 @@ async def get_logs(lines: int = 100):
     logger.info(f"Logs endpoint accessed - requesting {lines} lines")
 
     try:
-        # Read from the log file configured in config.toml
         log_file_path = wildwings_config["logfile_path"]
-        logger.info(f"Reading logs from: {log_file_path}")
 
         if not Path(log_file_path).exists():
             logger.warning(f"Log file not found at: {log_file_path}")
-            with mission_lock:
-                runtime_logs = logs[-lines:] if len(logs) > lines else logs.copy()
-            return {"logs": ["Log file not found"], "total_lines": 0, "runtime_logs": runtime_logs}
+            return {"logs": ["Log file not found"], "total_lines": 0}
 
         with open(log_file_path, 'r') as f:
             all_lines = f.readlines()
 
-        # Get the last 'lines' number of lines
         recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
-
-        # Clean up the lines and return as list
         file_logs = [line.strip() for line in recent_lines if line.strip()]
 
-        with mission_lock:
-            runtime_logs = logs[-lines:] if len(logs) > lines else logs.copy()
-            total_runtime_logs = len(logs)
-
-        logger.info(f"Returning {len(file_logs)} file log lines and {len(runtime_logs)} runtime log lines")
-        return {
-            "logs": file_logs,
-            "total_lines": len(all_lines),
-            "runtime_logs": runtime_logs,
-            "total_runtime_logs": total_runtime_logs
-        }
+        logger.info(f"Returning {len(file_logs)} log lines")
+        return {"logs": file_logs, "total_lines": len(all_lines)}
 
     except Exception as e:
         logger.error(f"Failed to read logs: {str(e)}")
-        with mission_lock:
-            runtime_logs = logs[-lines:] if logs else []
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to read logs: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to read logs: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(

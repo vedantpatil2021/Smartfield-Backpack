@@ -1,5 +1,8 @@
 import os
 import olympe
+import gc
+import subprocess
+import time
 from AnafiCamera import AnafiCamera
 from AnafiPiloting import AnafiPiloting
 from AnafiRTH import AnafiRTH
@@ -90,10 +93,10 @@ class AnafiController:
 	
 	def disconnect(self):
 		'''
-		Breaks the current connection with the drone 
+		Breaks the current connection with the drone
 		'''
-		
-		assert self.drone.disconnect()
+
+		self.drone.destroy()
 		print("< Drone Disconnected >")
 		
 	def get_drone_coordinates(self):

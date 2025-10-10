@@ -5,8 +5,8 @@ services:
       context: ./services/openpasslite
       dockerfile: Dockerfile
     container_name: openpasslite
-    ports:
-      - "2177:2177"
+    # ports:
+    #   - "2177:2177"
     volumes:
       - ./config.toml:/app/config.toml:ro
       - ./logs:/app/logs
@@ -14,8 +14,7 @@ services:
       - ./services/openpasslite/static:/app/static
     environment:
       - PYTHONPATH=/app
-    networks:
-      - smartfield-network
+    network_mode: "host"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:2177/"]
@@ -28,16 +27,15 @@ services:
       context: ./services/smartfields
       dockerfile: Dockerfile
     container_name: smartfield
-    ports:
-      - "2188:2188"
+    # ports:
+    #   - "2188:2188"
     volumes:
       - ./config.toml:/app/config.toml:ro
       - ./logs:/app/logs
       - ./mission:/app/mission:ro
     environment:
       - PYTHONPATH=/app
-    networks:
-      - smartfield-network
+    network_mode: "host"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:2188/"]
@@ -50,11 +48,11 @@ services:
       context: ./services/wildwings
       dockerfile: Dockerfile
     container_name: wildwings
-    ports:
-      - "2199:2199"
-      - "44444:44444/udp"
-      - "55004:55004/udp"
-      - "55005:55005/udp"
+    # ports:
+    #   - "2199:2199"
+    #   - "44444:44444/udp"
+    #   - "55004:55004/udp"
+    #   - "55005:55005/udp"
     volumes:
       - ./config.toml:/app/config.toml:ro
       - ./logs:/app/logs:rw
@@ -76,16 +74,12 @@ services:
     devices:
       - /dev/dri:/dev/dri
       - /dev/net/tun:/dev/net/tun
-    networks:
-      - smartfield-network
+    network_mode: "host"
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
       - NET_RAW
       - CAP_SYS_NICE
-    sysctls:
-      - net.ipv4.ip_forward=1
-      - net.ipv6.conf.all.disable_ipv6=0
     restart: unless-stopped
     privileged: true
     stdin_open: true
@@ -150,8 +144,13 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/main-dashboard.json
+      - GF_PANELS_DISABLE_SANITIZE_HTML=true
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
     networks:
       - smartfield-network
     depends_on:
