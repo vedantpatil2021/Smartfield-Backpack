@@ -7,9 +7,9 @@
   description: Field-deployable Smart Backpack system that addresses critical data acquisition challenges in animal ecology research.
   componentVersion: V 1.0.0
   targetIcicleRelease: 2025-08
-  licenseUrl: https://github.com/ICICLE-ai/OpenPass/blob/dev/LICENSE.md
+  licenseUrl: https://github.com/ICICLE-ai/Smartfield-Backpack/blob/master/LICENSE.md
   publicAccess: true
-  sourceCodeUrl: https://github.com/ICICLE-ai/OpenPass/tree/dev
+  sourceCodeUrl: https://github.com/ICICLE-ai/Smartfield-Backpack/tree/master
   releaseNotesUrl: NA
   citation:
   containerImage:
@@ -17,9 +17,9 @@
   testsWritten:
   securityReviewConducted:
   usageDocumentationAvailable: true
-  usageDocumentationUrl: https://github.com/ICICLE-ai/OpenPass/tree/dev
+  usageDocumentationUrl: https://github.com/ICICLE-ai/Smartfield-Backpack/tree/master
   developerDocumentationAvailable: true
-  developerDocumentationUrl: https://github.com/ICICLE-ai/OpenPass/blob/dev/README.md
+  developerDocumentationUrl: https://github.com/ICICLE-ai/Smartfield-Backpack/blob/master/README.md
   trainingTutorialsAvailable: true
   trainingTutorialsUrl:
   usageMetricsCollected: false
