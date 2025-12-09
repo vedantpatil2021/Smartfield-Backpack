@@ -6,7 +6,7 @@ import os
 import time
 import sys
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
@@ -35,10 +35,12 @@ mission_thread = None
 stop_mission_flag = threading.Event()
 current_process = None
 is_running = False
+mission_lat = None
+mission_lon = None
 
 def run_mission_background():
     """Execute mission in background thread"""
-    global stop_mission_flag, current_process, is_running
+    global stop_mission_flag, current_process, is_running, mission_lat, mission_lon
 
     with mission_lock:
         if is_running:
@@ -70,6 +72,14 @@ def run_mission_background():
         # Run the launch script
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
+
+        # Add lat/lon to environment if provided
+        if mission_lat is not None:
+            env['MISSION_LAT'] = str(mission_lat)
+            logger.info(f"Setting MISSION_LAT={mission_lat}")
+        if mission_lon is not None:
+            env['MISSION_LON'] = str(mission_lon)
+            logger.info(f"Setting MISSION_LON={mission_lon}")
 
         with mission_lock:
             current_process = subprocess.Popen(
@@ -198,10 +208,13 @@ async def root():
     return {"message": "WildWings Service", "status": "running"}
 
 @app.post("/start_mission")
-async def start_mission():
-    logger.info("Start mission endpoint accessed")
+async def start_mission(
+    lat: float = Query(None, description="Optional latitude coordinate"),
+    lon: float = Query(None, description="Optional longitude coordinate")
+):
+    logger.info(f"Start mission endpoint accessed with lat={lat}, lon={lon}")
 
-    global mission_thread, stop_mission_flag, is_running
+    global mission_thread, stop_mission_flag, is_running, mission_lat, mission_lon
 
     with mission_lock:
         if mission_thread and mission_thread.is_alive():
@@ -211,6 +224,10 @@ async def start_mission():
         if is_running:
             logger.warning("Mission request rejected - mission state indicates running")
             raise HTTPException(status_code=409, detail="Mission is currently running")
+
+        # Store lat/lon for the mission
+        mission_lat = lat
+        mission_lon = lon
 
     try:
         stop_mission_flag.clear()
@@ -222,10 +239,15 @@ async def start_mission():
         mission_thread.start()
 
         logger.info("WildWings mission started successfully")
-        return {
+        response = {
             "status": "success",
             "message": "WildWings mission started"
         }
+        if lat is not None:
+            response["lat"] = lat
+        if lon is not None:
+            response["lon"] = lon
+        return response
 
     except Exception as e:
         logger.error(f"Failed to start mission: {str(e)}")

@@ -27,7 +27,7 @@ def run(drone, lat=None, long=None):
         print("=== STABILIZING AFTER TAKEOFF ===")
 
         print("=== CHANGING THE DRONE GIMBAL MOTION ===")
-        drone.camera.controls.set_orientation(0, -90, 0, wait=True)
+        drone.camera.controls.set_orientation(0, -70, 0, wait=True)
         time.sleep(3)
 
         print(f"=== NAVIGATING TO TARGET ===")
@@ -57,7 +57,6 @@ def run(drone, lat=None, long=None):
                 wait=False
             )
             print("Navigation command sent (not waiting for completion)")
-            time.sleep(15)
 
         print("=== CHECKING FINAL POSITION ===")
         final_coords = drone.get_drone_coordinates()

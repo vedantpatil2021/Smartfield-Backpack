@@ -32,11 +32,24 @@ DURATION = 25  # duration in seconds
 
 # Retrieve the filename from command-line arguments
 if len(sys.argv) < 2:
-    logger.error("Usage: python controller.py <output_directory>")
+    logger.error("Usage: python controller.py <output_directory> [lat] [lon]")
     sys.exit(1)
 
 output_directory = sys.argv[1]
 logger.info(f"Output directory: {output_directory}")
+
+# Optional lat/lon coordinates
+mission_lat = None
+mission_lon = None
+if len(sys.argv) >= 4:
+    try:
+        mission_lat = float(sys.argv[2])
+        mission_lon = float(sys.argv[3])
+        logger.info(f"Mission coordinates received: lat={mission_lat}, lon={mission_lon}")
+    except (ValueError, IndexError) as e:
+        logger.warning(f"Invalid lat/lon coordinates provided: {e}")
+else:
+    logger.info("No mission coordinates provided")
 
 # Ensure output directory exists with proper permissions
 try:
@@ -90,7 +103,7 @@ class Tracker:
                 self.media.frame_counter += 1
                 frame_count += 1
 
-                if (self.media.frame_counter % 40) == 0:
+                if (self.media.frame_counter % 30) == 0:
                     logger.info(f"Processing frame {self.media.frame_counter}")
                     
                     # Get frame info
@@ -146,7 +159,6 @@ class Tracker:
 
 # Main execution
 try:
-    time.sleep(3)
     # Setup drone
     logger.info("Setting up drone connection")
     sp = SoftwarePilot()
@@ -157,30 +169,82 @@ try:
 
     # Connect to drone (drone should be flying from TAKEOFF mission)
     drone = sp.setup_drone("parrot_anafi", 1, "None")
+
     drone.connect()
-    logger.info("=" * 60)
     logger.info("Drone connected")
-    logger.info("=" * 60)
 
-    # Wait for stabilization
-    time.sleep(3)
+    if mission_lat is not None and mission_lon is not None:
+        try:
+            logger.info("=== CHECKING GPS STATUS ===")
+            coordinates = drone.get_drone_coordinates()
+            if not coordinates or coordinates[0] == 0.0 or coordinates[1] == 0.0:
+                raise Exception("GPS coordinates not available - drone may not have GPS lock")
 
+            logger.info(f"Current GPS: Lat={coordinates[0]:.6f}, Lon={coordinates[1]:.6f}, Alt={coordinates[2]:.2f}m")
+
+            logger.info("=== INITIATING TAKEOFF ===")
+            drone.piloting.takeoff()
+            time.sleep(2)
+            logger.info("✓ Takeoff completed")
+
+            logger.info("=== STABILIZING AFTER TAKEOFF ===")
+
+            logger.info("=== CHANGING THE DRONE GIMBAL MOTION ===")
+            drone.camera.controls.set_orientation(0, -90, 0, wait=True)
+            time.sleep(2)
+
+            logger.info(f"=== NAVIGATING TO TARGET ===")
+            logger.info(f"Target: Lat={mission_lat:.6f}, Lon={mission_lon:.6f}, Alt=13m")
+
+            try:
+                drone.piloting.move_to(
+                    lat=mission_lat,
+                    lon=mission_lon,
+                    alt=5,
+                    orientation_mode="TO_TARGET",
+                    heading=0,
+                    wait=True
+                )
+                logger.info("Navigation completed successfully")
+
+            except AssertionError as e:
+                logger.info(f"Navigation with wait=True failed: {e}")
+                logger.info("Attempting navigation without waiting...")
+
+                drone.piloting.move_to(
+                    lat=mission_lat,
+                    lon=mission_lon,
+                    alt=5,
+                    orientation_mode="TO_TARGET",
+                    heading=0,
+                    wait=False
+                )
+                logger.info("Navigation command sent (not waiting for completion)")
+
+            logger.info("=== CHECKING FINAL POSITION ===")
+            final_coords = drone.get_drone_coordinates()
+            logger.info(f"Final position: Lat={final_coords[0]:.6f}, Lon={final_coords[1]:.6f}, Alt={final_coords[2]:.2f}m")
+
+            logger.info("=== MISSION COMPLETED SUCCESSFULLY ===")
+
+        except Exception as e:
+            logger.info(f"Mission failed: {e}")
+            raise
+    else:
+        logger.info("No mission coordinates were provided for this mission")
+
+
+    logger.info("=== CHANGING THE DRONE GIMBAL MOTION ===")
+    drone.camera.controls.set_orientation(0, -65, 0, wait=True)
+    time.sleep(2)
+    
     # Create tracker
     tracker = Tracker(drone, model)
 
-    # Setup and start recording
-    logger.info("=" * 60)
-    logger.info("Starting recording")
-    logger.info("=" * 60)
-    drone.camera.media.setup_recording()
-    drone.camera.media.start_recording()
-
-    time.sleep(5)
+    time.sleep(2)
 
     # Start stream with tracking
-    logger.info("=" * 60)
     logger.info("Starting video stream")
-    logger.info("=" * 60)
     drone.camera.media.setup_stream(yuv_frame_processing=tracker.track)
     drone.camera.media.start_stream()
 
@@ -199,30 +263,49 @@ try:
     time.sleep(DURATION)
 
     # Stop stream
-    logger.info("=" * 60)
     logger.info("Stopping stream")
-    logger.info("=" * 60)
     drone.camera.media.stop_stream()
-
-    # Stop recording
-    logger.info("=" * 60)
-    logger.info("Stopping recording")
-    logger.info("=" * 60)
-    drone.camera.media.stop_recording()
-
-    # Disconnect
-    logger.info("=" * 60)
-    logger.info("Disconnecting drone")
-    logger.info("=" * 60)
-    drone.disconnect()
-    time.sleep(15)
-    logger.info("=" * 60)
-    logger.info("Mission Completed")
-    logger.info("=" * 60)
     
 except Exception as e:
     logger.error(f"Mission failed with error: {e}", exc_info=True)
+    # logger.info mission coordinates before disconnection
+    if mission_lat is not None and mission_lon is not None:
+        try:
+            logger.info("=== SETTING UP RETURN TO HOME ===")
+            drone.rth.setup_rth()
+
+            logger.info("=== RETURNING BACK HOME ===")
+            drone.rth.return_to_home()
+
+        except Exception as e:
+            print(f"RTB mission failed: {e}")
+            raise
+
+
+    # Disconnect
+    logger.info("Disconnecting drone")
+    drone.disconnect()
+    logger.info("Mission Completed")
+
     cv2.destroyAllWindows()
     sys.exit(1)
 finally:
     cv2.destroyAllWindows()
+    # logger.info mission coordinates before disconnection
+    if mission_lat is not None and mission_lon is not None:
+        try:
+            logger.info("=== SETTING UP RETURN TO HOME ===")
+            drone.rth.setup_rth()
+
+            logger.info("=== RETURNING BACK HOME ===")
+            drone.rth.return_to_home()
+
+        except Exception as e:
+            print(f"RTB mission failed: {e}")
+            raise
+
+
+    # Disconnect
+    logger.info("Disconnecting drone")
+    drone.disconnect()
+    logger.info("Mission Completed")

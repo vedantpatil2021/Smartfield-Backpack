@@ -70,6 +70,11 @@ async def call_service(services: dict, service_name: str, endpoint: str, mission
                 async with session.post(url, params=params) as response:
                     status_code = response.status
                     response_text = await response.text()
+            elif service_name == "wildwings" and endpoint == "/start_mission":
+                params = {'lat': lat, 'lon': lon}
+                async with session.post(url, params=params) as response:
+                    status_code = response.status
+                    response_text = await response.text()
             else:
                 async with session.post(url) as response:
                     status_code = response.status

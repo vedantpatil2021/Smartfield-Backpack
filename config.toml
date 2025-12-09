@@ -29,8 +29,8 @@ smartfields_url = "http://smartfields:2188/initiate_process"
 
 # MQTT topic mapping for each Pi
 [mqtt_topics."cameratrap/events"]
-lat = 40.00819037159015
-lon = -83.01752429455519
+lat = 40.008278960212
+lon = -83.0175149068236
 camid = "pi-001"
 
 #[mqtt_topics."pi/002/events"]

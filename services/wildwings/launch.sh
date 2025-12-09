@@ -24,7 +24,13 @@ fi
 
 
 # Run the Python script with live output to wildwings.log
-python3 controller.py "$output_dir" 2>&1 | tee -a logs/wildwings.log
+# Pass MISSION_LAT and MISSION_LON as arguments if they are set
+if [ -n "$MISSION_LAT" ] && [ -n "$MISSION_LON" ]; then
+    echo "$(date): Running mission with coordinates: lat=$MISSION_LAT, lon=$MISSION_LON" | tee -a logs/wildwings.log
+    python3 controller.py "$output_dir" "$MISSION_LAT" "$MISSION_LON" 2>&1 | tee -a logs/wildwings.log
+else
+    python3 controller.py "$output_dir" 2>&1 | tee -a logs/wildwings.log
+fi
 
 # Capture the exit code from python script
 EXIT_CODE=${PIPESTATUS[0]}
