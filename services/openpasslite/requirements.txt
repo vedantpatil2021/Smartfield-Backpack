@@ -1,0 +1,6 @@
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+parrot-olympe
+toml>=0.10.2
+python-multipart
+opencv-python

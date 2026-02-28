@@ -1,0 +1,355 @@
+name: Build, Push & Offline Bundle
+
+on:
+  push:
+    branches: [master]
+    tags:    ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Override image tag (e.g. 1.2.0). Defaults to tag or 'dev'."
+        required: false
+
+env:
+  REGISTRY: ghcr.io
+  ORG: icicle-ai
+  MOSQUITTO_IMAGE: eclipse-mosquitto:2.0.18
+  K3S_VERSION: v1.29.3+k3s1
+  HELM_VERSION: v3.14.3
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 1 – Build and push the four custom images
+  # ───────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: mqtt-subscriber
+            context: services/mqtt_subscriber
+          - service: openpasslite
+            context: services/openpasslite
+          - service: smartfields
+            context: services/smartfields
+          - service: wildwings
+            context: services/wildwings
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: version
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-${{ matrix.service }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.tag }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to:   type=gha,scope=${{ matrix.service }},mode=max
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 2 – Build a fully self-contained offline bundle
+  #
+  # Bundle layout:
+  #   offline-bundle/
+  #   ├── bin/
+  #   │   ├── k3s                          # k3s binary
+  #   │   ├── k3s-install.sh               # official k3s installer (patched for offline)
+  #   │   └── helm                         # helm binary
+  #   ├── images/
+  #   │   ├── k3s-airgap-images.tar.gz     # k3s core images (coredns, metrics, etc.)
+  #   │   ├── mosquitto.tar.gz
+  #   │   ├── smartfield-mqtt-subscriber.tar.gz
+  #   │   ├── smartfield-openpasslite.tar.gz
+  #   │   ├── smartfield-smartfields.tar.gz
+  #   │   └── smartfield-wildwings.tar.gz
+  #   ├── smartfield-<tag>.tgz             # packaged Helm chart
+  #   └── load.sh                          # one-shot installer
+  # ───────────────────────────────────────────────────────────────────────────
+  offline-bundle:
+    name: Offline Bundle
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: version
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Download k3s binary + airgap images + install script ──────────────
+      - name: Download k3s binaries
+        run: |
+          mkdir -p offline-bundle/bin offline-bundle/images
+
+          K3S_BASE="https://github.com/k3s-io/k3s/releases/download/${{ env.K3S_VERSION }}"
+
+          # k3s binary
+          curl -fsSL "${K3S_BASE}/k3s" -o offline-bundle/bin/k3s
+          chmod +x offline-bundle/bin/k3s
+
+          # k3s airgap images (containerd image cache for core cluster components)
+          curl -fsSL "${K3S_BASE}/k3s-airgap-images-amd64.tar.gz" \
+            -o offline-bundle/images/k3s-airgap-images.tar.gz
+
+          # k3s install script (we'll patch it to skip the download)
+          curl -fsSL https://get.k3s.io -o offline-bundle/bin/k3s-install.sh
+          chmod +x offline-bundle/bin/k3s-install.sh
+
+      # ── Download Helm ──────────────────────────────────────────────────────
+      - name: Download Helm binary
+        run: |
+          HELM_ARCHIVE="helm-${{ env.HELM_VERSION }}-linux-amd64.tar.gz"
+          curl -fsSL "https://get.helm.sh/${HELM_ARCHIVE}" | \
+            tar xz -C offline-bundle/bin --strip-components=1 linux-amd64/helm
+          chmod +x offline-bundle/bin/helm
+
+      # ── Pull and save application images ──────────────────────────────────
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull all application images
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          docker pull ${{ env.MOSQUITTO_IMAGE }}
+          docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-mqtt-subscriber:${TAG}
+          docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-openpasslite:${TAG}
+          docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-smartfields:${TAG}
+          docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-wildwings:${TAG}
+
+      - name: Save application images as tarballs
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          docker save ${{ env.MOSQUITTO_IMAGE }} \
+            | gzip > offline-bundle/images/mosquitto.tar.gz
+          docker save ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-mqtt-subscriber:${TAG} \
+            | gzip > offline-bundle/images/smartfield-mqtt-subscriber.tar.gz
+          docker save ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-openpasslite:${TAG} \
+            | gzip > offline-bundle/images/smartfield-openpasslite.tar.gz
+          docker save ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-smartfields:${TAG} \
+            | gzip > offline-bundle/images/smartfield-smartfields.tar.gz
+          docker save ${{ env.REGISTRY }}/${{ env.ORG }}/smartfield-wildwings:${TAG} \
+            | gzip > offline-bundle/images/smartfield-wildwings.tar.gz
+
+      # ── Package Helm chart ─────────────────────────────────────────────────
+      - name: Package Helm chart
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          helm package charts/smartfield \
+            --version "${TAG}" \
+            --app-version "${TAG}" \
+            --destination offline-bundle/
+
+      # ── Write the one-shot load.sh installer ──────────────────────────────
+      - name: Write load.sh
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          cat > offline-bundle/load.sh << 'LOADER'
+          #!/usr/bin/env bash
+          # ═══════════════════════════════════════════════════════════════════
+          #  Smartfield offline installer
+          #  Works on a fresh Ubuntu/Debian node with zero internet access.
+          #
+          #  Usage:
+          #    sudo ./load.sh                     # install everything
+          #    sudo ./load.sh --skip-k3s          # skip k3s if already installed
+          #    sudo NAMESPACE=myns ./load.sh      # custom namespace
+          # ═══════════════════════════════════════════════════════════════════
+          set -euo pipefail
+
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          IMAGES_DIR="${SCRIPT_DIR}/images"
+          BIN_DIR="${SCRIPT_DIR}/bin"
+          NAMESPACE="${NAMESPACE:-smartfield}"
+          RELEASE="${RELEASE:-smartfield}"
+          SKIP_K3S=false
+
+          for arg in "$@"; do
+            [[ "${arg}" == "--skip-k3s" ]] && SKIP_K3S=true
+          done
+
+          # ── helpers ────────────────────────────────────────────────────────
+          log()  { echo "==> $*"; }
+          die()  { echo "ERROR: $*" >&2; exit 1; }
+
+          [[ $EUID -eq 0 ]] || die "Run as root (sudo ./load.sh)"
+
+          # ── 1. Install k3s (offline) ───────────────────────────────────────
+          if [[ "${SKIP_K3S}" == false ]]; then
+            log "Installing k3s (offline)..."
+
+            install -m 0755 "${BIN_DIR}/k3s" /usr/local/bin/k3s
+
+            # Pre-seed k3s airgap images so it never tries to pull from internet
+            mkdir -p /var/lib/rancher/k3s/agent/images
+            cp "${IMAGES_DIR}/k3s-airgap-images.tar.gz" \
+               /var/lib/rancher/k3s/agent/images/
+
+            # Run the installer in offline mode
+            INSTALL_K3S_SKIP_DOWNLOAD=true \
+            INSTALL_K3S_EXEC="--disable traefik --disable servicelb" \
+              "${BIN_DIR}/k3s-install.sh"
+
+            # Wait for node to be ready
+            log "Waiting for k3s node to be ready..."
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            timeout 120 bash -c \
+              'until kubectl get node 2>/dev/null | grep -q " Ready"; do sleep 3; done'
+            log "k3s node is ready."
+          else
+            log "Skipping k3s install (--skip-k3s)."
+          fi
+
+          # Make kubectl/helm available for the rest of the script
+          export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+
+          # ── 2. Install Helm ────────────────────────────────────────────────
+          if ! command -v helm &>/dev/null; then
+            log "Installing Helm..."
+            install -m 0755 "${BIN_DIR}/helm" /usr/local/bin/helm
+          else
+            log "Helm already installed: $(helm version --short)"
+          fi
+
+          # ── 3. Load application images into containerd ─────────────────────
+          log "Loading application images..."
+          for tar in "${IMAGES_DIR}"/*.tar.gz; do
+            name="${tar##*/}"
+            # skip k3s airgap bundle — already seeded above
+            [[ "${name}" == k3s-airgap-images.tar.gz ]] && continue
+            log "  ${name}"
+            k3s ctr images import "${tar}"
+          done
+
+          # ── 4. Deploy via Helm ─────────────────────────────────────────────
+          log "Deploying Helm chart (namespace: ${NAMESPACE})..."
+          CHART=$(ls "${SCRIPT_DIR}"/*.tgz | head -1)
+          helm upgrade --install "${RELEASE}" "${CHART}" \
+            --namespace "${NAMESPACE}" \
+            --create-namespace \
+            --wait --timeout 300s
+
+          # ── 5. Done ────────────────────────────────────────────────────────
+          log "Deployment complete."
+          echo ""
+          kubectl get pods -n "${NAMESPACE}"
+          echo ""
+          echo "To stream logs:"
+          echo "  kubectl logs -n ${NAMESPACE} -l app=smartfields -f"
+          echo "  kubectl logs -n ${NAMESPACE} -l app=wildwings   -f"
+          echo "  kubectl logs -n ${NAMESPACE} -l app=openpasslite -f"
+          LOADER
+
+          chmod +x offline-bundle/load.sh
+
+      # ── Create final archive + checksum ───────────────────────────────────
+      - name: Create bundle archive
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          tar -czf smartfield-offline-${TAG}.tar.gz offline-bundle/
+          sha256sum smartfield-offline-${TAG}.tar.gz \
+            > smartfield-offline-${TAG}.tar.gz.sha256
+
+      - name: Upload bundle as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartfield-offline-${{ steps.version.outputs.tag }}
+          path: |
+            smartfield-offline-*.tar.gz
+            smartfield-offline-*.tar.gz.sha256
+          retention-days: 30
+
+      # ── GitHub Release (on version tags only) ─────────────────────────────
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Smartfield ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
+          files: |
+            smartfield-offline-*.tar.gz
+            smartfield-offline-*.tar.gz.sha256
+          body: |
+            ## Smartfield ${{ github.ref_name }}
+
+            ### Online install (connected node)
+            ```bash
+            helm upgrade --install smartfield oci://ghcr.io/${{ env.ORG }}/charts/smartfield \
+              --version ${{ steps.version.outputs.tag }} \
+              --namespace smartfield --create-namespace
+            ```
+
+            ### Offline install (air-gapped / edge node)
+            ```bash
+            # 1. Copy the bundle to the target node (USB, SCP, etc.)
+            scp smartfield-offline-${{ steps.version.outputs.tag }}.tar.gz user@field-node:~
+
+            # 2. On the target node — verify integrity, extract, and install
+            sha256sum -c smartfield-offline-${{ steps.version.outputs.tag }}.tar.gz.sha256
+            tar xzf smartfield-offline-${{ steps.version.outputs.tag }}.tar.gz
+            sudo ./offline-bundle/load.sh
+
+            # 3. If k3s is already installed, skip it
+            sudo ./offline-bundle/load.sh --skip-k3s
+            ```

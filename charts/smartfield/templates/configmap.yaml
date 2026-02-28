@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smartfield-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  config.toml: |
+    [meta]
+    version = "{{ .Values.config.meta.version }}"
+
+    [openpasslite]
+    host = "{{ .Values.config.openpasslite.host }}"
+    port = {{ .Values.config.openpasslite.port }}
+    log_level = "{{ .Values.config.openpasslite.logLevel }}"
+    mission_timeout_seconds = {{ .Values.config.openpasslite.missionTimeoutSeconds }}
+    drone_disconnect_wait_seconds = {{ .Values.config.openpasslite.droneDisconnectWaitSeconds }}
+
+    [smartfields]
+    host = "{{ .Values.config.smartfields.host }}"
+    port = {{ .Values.config.smartfields.port }}
+    log_level = "{{ .Values.config.smartfields.logLevel }}"
+
+    [wildwings]
+    host = "{{ .Values.config.wildwings.host }}"
+    port = {{ .Values.config.wildwings.port }}
+    log_level = "{{ .Values.config.wildwings.logLevel }}"
+    mission_duration_seconds = {{ .Values.config.wildwings.missionDurationSeconds }}
+    model_path = "{{ .Values.config.wildwings.modelPath }}"
+
+    [subscriber]
+    client_id = "{{ .Values.config.subscriber.clientId }}"
+    qos = {{ .Values.config.subscriber.qos }}
+    broker = "{{ .Values.config.subscriber.broker }}"
+    port = {{ .Values.config.subscriber.port }}
+    log_level = "{{ .Values.config.subscriber.logLevel }}"
+    smartfields_url = "{{ .Values.config.subscriber.smartfieldsUrl }}"
+    reconnect_max_delay_seconds = {{ .Values.config.subscriber.reconnectMaxDelaySeconds }}
+
+    [subscriber.topics."{{ .Values.config.topic.name }}"]
+    lat = {{ .Values.config.topic.lat }}
+    lon = {{ .Values.config.topic.lon }}
+    camid = "{{ .Values.config.topic.camid }}"

@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smartfields
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: smartfields
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: smartfields
+  template:
+    metadata:
+      labels:
+        app: smartfields
+    spec:
+      containers:
+        - name: smartfields
+          image: "{{ .Values.images.smartfields.repository }}:{{ .Values.images.smartfields.tag }}"
+          imagePullPolicy: {{ .Values.images.smartfields.pullPolicy }}
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            # NODE_IP lets smartfields reach hostNetwork services (openpasslite, wildwings)
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OPENPASSLITE_URL
+              value: "http://$(NODE_IP):{{ .Values.config.openpasslite.port }}"
+            - name: WILDWINGS_URL
+              value: "http://$(NODE_IP):{{ .Values.config.wildwings.port }}"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.toml
+              subPath: config.toml
+              readOnly: true
+            - name: logs
+              mountPath: /var/log/smartfield
+          resources:
+            {{- toYaml .Values.resources.smartfields | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.config.smartfields.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: smartfield-config
+        - name: logs
+          persistentVolumeClaim:
+            claimName: smartfield-logs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smartfields
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: smartfields
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    app: smartfields
+  ports:
+    - port: {{ .Values.config.smartfields.port }}
+      targetPort: {{ .Values.config.smartfields.port }}

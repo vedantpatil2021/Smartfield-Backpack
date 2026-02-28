@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openpasslite
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: openpasslite
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: openpasslite
+  template:
+    metadata:
+      labels:
+        app: openpasslite
+    spec:
+      hostNetwork: true                   # needed for drone WiFi (192.168.42.x)
+      dnsPolicy: ClusterFirstWithHostNet  # keep K3s DNS working
+      containers:
+        - name: openpasslite
+          image: "{{ .Values.images.openpasslite.repository }}:{{ .Values.images.openpasslite.tag }}"
+          imagePullPolicy: {{ .Values.images.openpasslite.pullPolicy }}
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: OLYMPE_LOG_LEVEL
+              value: "WARNING"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.toml
+              subPath: config.toml
+              readOnly: true
+            - name: logs
+              mountPath: /var/log/smartfield
+            - name: missions
+              mountPath: /app/mission
+            - name: media
+              mountPath: /app/media
+          resources:
+            {{- toYaml .Values.resources.openpasslite | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.config.openpasslite.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: config
+          configMap:
+            name: smartfield-config
+        - name: logs
+          persistentVolumeClaim:
+            claimName: smartfield-logs
+        - name: missions
+          persistentVolumeClaim:
+            claimName: smartfield-missions
+        - name: media
+          persistentVolumeClaim:
+            claimName: smartfield-media
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openpasslite
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: openpasslite
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    app: openpasslite
+  ports:
+    - port: {{ .Values.config.openpasslite.port }}
+      targetPort: {{ .Values.config.openpasslite.port }}

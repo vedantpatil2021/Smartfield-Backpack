@@ -1,0 +1,119 @@
+# ── Image settings ─────────────────────────────────────────────────────────────
+images:
+  mosquitto:
+    repository: eclipse-mosquitto
+    tag: "2.0.18"
+    pullPolicy: IfNotPresent
+  mqttSubscriber:
+    repository: ghcr.io/icicle-ai/smartfield-mqtt-subscriber
+    tag: "1.1.0"
+    pullPolicy: IfNotPresent
+  openpasslite:
+    repository: ghcr.io/icicle-ai/smartfield-openpasslite
+    tag: "1.1.0"
+    pullPolicy: IfNotPresent
+  smartfields:
+    repository: ghcr.io/icicle-ai/smartfield-smartfields
+    tag: "1.1.0"
+    pullPolicy: IfNotPresent
+  wildwings:
+    repository: ghcr.io/icicle-ai/smartfield-wildwings
+    tag: "1.1.0"
+    pullPolicy: IfNotPresent
+
+# ── Persistent storage ─────────────────────────────────────────────────────────
+storage:
+  storageClass: local-path
+  logs:
+    size: 5Gi
+  missions:
+    size: 20Gi
+  media:
+    size: 50Gi
+
+# ── Host path for YOLOv5 model (pre-placed on the node) ───────────────────────
+models:
+  hostPath: /opt/smartfield/models
+
+# ── Application configuration (rendered into config.toml) ─────────────────────
+config:
+  meta:
+    version: "1.1.0"
+
+  openpasslite:
+    host: "0.0.0.0"
+    port: 2177
+    logLevel: "INFO"
+    missionTimeoutSeconds: 180
+    droneDisconnectWaitSeconds: 15
+
+  smartfields:
+    host: "0.0.0.0"
+    port: 2188
+    logLevel: "INFO"
+
+  wildwings:
+    host: "0.0.0.0"
+    port: 2199
+    logLevel: "INFO"
+    missionDurationSeconds: 25
+    modelPath: "/app/models/yolov5su.pt"
+
+  subscriber:
+    clientId: "smartfield-subscriber"
+    qos: 1
+    broker: "mosquitto"
+    port: 1883
+    logLevel: "INFO"
+    smartfieldsUrl: "http://smartfields:2188/initiate_pipeline"
+    reconnectMaxDelaySeconds: 60
+
+  # Single camera-trap topic mapping.
+  # To add more topics, extend subscriber.py and add entries here.
+  topic:
+    name: "cameratrap/events"
+    lat: 40.008278960212
+    lon: -83.0175149068236
+    camid: "pi-001"
+
+# ── Resource requests and limits ───────────────────────────────────────────────
+resources:
+  mosquitto:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+  mqttSubscriber:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+  openpasslite:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+
+  smartfields:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+
+  wildwings:
+    requests:
+      cpu: "500m"
+      memory: "2Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"

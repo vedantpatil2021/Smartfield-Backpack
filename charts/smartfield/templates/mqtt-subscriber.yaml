@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtt-subscriber
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mqtt-subscriber
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mqtt-subscriber
+  template:
+    metadata:
+      labels:
+        app: mqtt-subscriber
+    spec:
+      containers:
+        - name: mqtt-subscriber
+          image: "{{ .Values.images.mqttSubscriber.repository }}:{{ .Values.images.mqttSubscriber.tag }}"
+          imagePullPolicy: {{ .Values.images.mqttSubscriber.pullPolicy }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.toml
+              subPath: config.toml
+              readOnly: true
+            - name: logs
+              mountPath: /var/log/smartfield
+          resources:
+            {{- toYaml .Values.resources.mqttSubscriber | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: smartfield-config
+        - name: logs
+          persistentVolumeClaim:
+            claimName: smartfield-logs

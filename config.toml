@@ -1,0 +1,40 @@
+[meta]
+version = "1.1.0"
+
+[openpasslite]
+host = "0.0.0.0"
+port = 2177
+log_level = "INFO"
+mission_timeout_seconds = 180
+drone_disconnect_wait_seconds = 15
+
+[smartfields]
+host = "0.0.0.0"
+port = 2188
+log_level = "INFO"
+
+[wildwings]
+host = "0.0.0.0"
+port = 2199
+log_level = "INFO"
+mission_duration_seconds = 25
+model_path = "/app/models/yolov5su.pt"
+
+[subscriber]
+client_id = "smartfield-subscriber"
+qos = 1
+broker = "mosquitto"
+port = 1883
+log_level = "INFO"
+smartfields_url = "http://smartfields:2188/initiate_pipeline"
+reconnect_max_delay_seconds = 60
+
+[subscriber.topics."cameratrap/events"]
+lat = 40.008278960212
+lon = -83.0175149068236
+camid = "pi-001"
+
+#[subscriber.topics."pi/002/events"]
+#lat = 40.00811
+#lon = -83.01809
+#camid = "pi-002"

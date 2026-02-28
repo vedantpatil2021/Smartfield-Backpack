@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mosquitto
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      containers:
+        - name: mosquitto
+          image: "{{ .Values.images.mosquitto.repository }}:{{ .Values.images.mosquitto.tag }}"
+          imagePullPolicy: {{ .Values.images.mosquitto.pullPolicy }}
+          ports:
+            - containerPort: 1883
+          volumeMounts:
+            - name: data
+              mountPath: /mosquitto/data
+          resources:
+            {{- toYaml .Values.resources.mosquitto | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mosquitto
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    app: mosquitto
+  ports:
+    - port: 1883
+      targetPort: 1883
