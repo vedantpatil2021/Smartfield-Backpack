@@ -1,6 +1,11 @@
 [meta]
 version = "1.1.0"
 
+[logging]
+dir          = "/var/log/smartfield"
+missions_dir = "/var/log/smartfield/missions"
+max_missions = 100
+
 [openpasslite]
 host = "0.0.0.0"
 port = 2177
@@ -12,6 +17,7 @@ drone_disconnect_wait_seconds = 15
 host = "0.0.0.0"
 port = 2188
 log_level = "INFO"
+inter_step_delay_seconds = 5
 
 [wildwings]
 host = "0.0.0.0"
@@ -19,6 +25,7 @@ port = 2199
 log_level = "INFO"
 mission_duration_seconds = 25
 model_path = "/app/models/yolov5su.pt"
+models = ["yolov5su"]  # available detection models shown in UI dropdown
 
 [subscriber]
 client_id = "smartfield-subscriber"

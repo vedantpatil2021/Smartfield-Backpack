@@ -1,4 +1,5 @@
-.PHONY: install deploy upgrade uninstall status logs-sf logs-opl logs-ww logs-sub
+.PHONY: install deploy upgrade uninstall status \
+        logs-sf logs-opl logs-ww logs-sub logs-go2rtc
 
 install:
 	sudo bash scripts/install-k3s.sh
@@ -26,3 +27,6 @@ logs-ww:
 
 logs-sub:
 	kubectl -n smartfield logs -f deployment/mqtt-subscriber
+
+logs-go2rtc:
+	kubectl -n smartfield logs -f deployment/go2rtc

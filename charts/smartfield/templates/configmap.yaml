@@ -11,6 +11,11 @@ data:
     [meta]
     version = "{{ .Values.config.meta.version }}"
 
+    [logging]
+    dir          = "{{ .Values.config.logging.dir }}"
+    missions_dir = "{{ .Values.config.logging.missionsDir }}"
+    max_missions = {{ .Values.config.logging.maxMissions }}
+
     [openpasslite]
     host = "{{ .Values.config.openpasslite.host }}"
     port = {{ .Values.config.openpasslite.port }}
@@ -22,6 +27,7 @@ data:
     host = "{{ .Values.config.smartfields.host }}"
     port = {{ .Values.config.smartfields.port }}
     log_level = "{{ .Values.config.smartfields.logLevel }}"
+    inter_step_delay_seconds = {{ .Values.config.smartfields.interStepDelaySeconds }}
 
     [wildwings]
     host = "{{ .Values.config.wildwings.host }}"
@@ -29,6 +35,7 @@ data:
     log_level = "{{ .Values.config.wildwings.logLevel }}"
     mission_duration_seconds = {{ .Values.config.wildwings.missionDurationSeconds }}
     model_path = "{{ .Values.config.wildwings.modelPath }}"
+    models = {{ .Values.config.wildwings.models | toJson }}
 
     [subscriber]
     client_id = "{{ .Values.config.subscriber.clientId }}"
