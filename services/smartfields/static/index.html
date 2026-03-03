@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartField</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .pulse-dot { animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-mono h-screen flex flex-col overflow-hidden">
+
+  <!-- Nav -->
+  <header class="bg-gray-900 border-b border-gray-800 px-5 py-2.5 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-2.5">
+      <div class="w-2 h-2 rounded-full bg-green-400"></div>
+      <span class="text-sm font-semibold tracking-widest text-gray-200">SMARTFIELD</span>
+    </div>
+    <span class="text-xs text-gray-600" id="last-updated">—</span>
+  </header>
+
+  <!-- Body: side panel + video -->
+  <div class="flex flex-1 min-h-0">
+
+    <!-- Left panel -->
+    <aside class="w-72 border-r border-gray-800 flex flex-col overflow-y-auto shrink-0">
+
+      <!-- Services -->
+      <section class="p-4 border-b border-gray-800 shrink-0">
+        <h2 class="text-[10px] text-gray-500 uppercase tracking-widest mb-2.5">Services</h2>
+        <div id="services" class="space-y-1.5">
+          <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-gray-700"></div><span class="text-sm text-gray-500">loading…</span></div>
+        </div>
+      </section>
+
+      <!-- Pipeline status -->
+      <section class="p-4 border-b border-gray-800 shrink-0">
+        <h2 class="text-[10px] text-gray-500 uppercase tracking-widest mb-2.5">Pipeline</h2>
+        <div id="pipeline-badge" class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-800 text-sm text-gray-400">
+          <div class="w-2 h-2 rounded-full bg-gray-600"></div><span>idle</span>
+        </div>
+        <p id="coords" class="mt-2 text-xs text-gray-600"></p>
+      </section>
+
+      <!-- Camera Trap Location -->
+      <section class="p-4 border-b border-gray-800 shrink-0">
+        <h2 class="text-[10px] text-gray-500 uppercase tracking-widest mb-2.5">Camera Trap Location</h2>
+        <div class="space-y-2 mb-3">
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase tracking-wider">Latitude</label>
+            <input id="lat" type="number" step="any"
+              class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-green-600 transition">
+          </div>
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase tracking-wider">Longitude</label>
+            <input id="lon" type="number" step="any"
+              class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-green-600 transition">
+          </div>
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase tracking-wider">Camera ID</label>
+            <input id="camid" type="text"
+              class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-green-600 transition">
+          </div>
+          <div>
+            <label class="text-[10px] text-gray-500 uppercase tracking-wider">Detection Model</label>
+            <select id="model"
+              class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-green-600 transition appearance-none cursor-pointer">
+              <option value="yolov5su">yolov5su · WildWings</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="startPipeline()"
+            class="flex-1 bg-green-800 hover:bg-green-700 active:bg-green-900 text-white text-sm py-1.5 rounded transition">
+            ▶ Start
+          </button>
+          <button onclick="stopPipeline()"
+            class="flex-1 bg-red-900 hover:bg-red-800 active:bg-red-950 text-white text-sm py-1.5 rounded transition">
+            ■ Stop
+          </button>
+        </div>
+        <p id="action-msg" class="mt-2 text-xs text-gray-500 min-h-[1rem]"></p>
+      </section>
+
+      <!-- Mission History -->
+      <section class="p-4 flex flex-col flex-1 min-h-0">
+        <div class="flex items-center justify-between mb-2 shrink-0">
+          <h2 class="text-[10px] text-gray-500 uppercase tracking-widest">Mission History</h2>
+          <button onclick="refreshMissions()" class="text-gray-700 hover:text-gray-400 text-xs transition">↺</button>
+        </div>
+        <!-- Mission list -->
+        <div id="mission-list" class="space-y-0.5 shrink-0 overflow-y-auto max-h-40 mb-2">
+          <p class="text-xs text-gray-600 px-1">loading…</p>
+        </div>
+        <!-- Log for selected mission -->
+        <div id="mission-log"
+          class="flex-1 overflow-y-auto bg-gray-900 rounded p-2 text-[11px] text-gray-400 whitespace-pre-wrap leading-relaxed min-h-[6rem]">
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- Right: live video -->
+    <main class="flex-1 flex flex-col min-w-0">
+      <div class="px-4 py-2.5 border-b border-gray-800 shrink-0">
+        <h2 class="text-[10px] text-gray-500 uppercase tracking-widest">Live Feed · WebRTC via go2rtc</h2>
+      </div>
+      <div class="flex-1 relative bg-black">
+        <iframe id="go2rtc-frame" class="absolute inset-0 w-full h-full border-0"
+          allow="autoplay; fullscreen" allowfullscreen></iframe>
+        <div id="video-offline"
+          class="absolute inset-0 flex items-center justify-center text-gray-700 text-sm">
+          Connecting to go2rtc on port 1984…
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+    const GO2RTC_PORT = 1984;
+
+    // ── go2rtc iframe ────────────────────────────────────────────────────────
+    (function () {
+      const frame = document.getElementById('go2rtc-frame');
+      frame.src = `http://${window.location.hostname}:${GO2RTC_PORT}/stream.html?src=drone&mode=webrtc`;
+      frame.onload = () => document.getElementById('video-offline').style.display = 'none';
+    })();
+
+    // ── Load defaults from config.toml via API (single source of truth) ──────
+    async function initDefaults() {
+      try {
+        const d = await fetch('/config/defaults').then(r => r.json());
+        document.getElementById('lat').value   = d.lat;
+        document.getElementById('lon').value   = d.lon;
+        document.getElementById('camid').value = d.camid;
+        if (d.models?.length) {
+          document.getElementById('model').innerHTML =
+            d.models.map(m => `<option value="${m}">${m} · WildWings</option>`).join('');
+        }
+      } catch (_) {}
+    }
+
+    // ── Status polling ───────────────────────────────────────────────────────
+    async function refreshStatus() {
+      try {
+        const d = await fetch('/status').then(r => r.json());
+        document.getElementById('last-updated').textContent =
+          'Updated ' + new Date().toLocaleTimeString();
+
+        document.getElementById('services').innerHTML =
+          Object.entries(d.services).map(([name, up]) =>
+            `<div class="flex items-center gap-2">
+               <div class="w-2 h-2 rounded-full ${up ? 'bg-green-400' : 'bg-red-500'}"></div>
+               <span class="text-sm ${up ? 'text-gray-300' : 'text-red-400'}">${name}</span>
+             </div>`
+          ).join('');
+
+        const badge = document.getElementById('pipeline-badge');
+        if (d.stop_requested) {
+          badge.className = 'inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-900/30 border border-yellow-800 text-sm text-yellow-300';
+          badge.innerHTML = '<div class="w-2 h-2 rounded-full bg-yellow-400 pulse-dot"></div><span>stopping…</span>';
+        } else if (d.pipeline_running) {
+          badge.className = 'inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-900/30 border border-green-800 text-sm text-green-300';
+          badge.innerHTML = '<div class="w-2 h-2 rounded-full bg-green-400 pulse-dot"></div><span>running</span>';
+        } else {
+          badge.className = 'inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-800 text-sm text-gray-400';
+          badge.innerHTML = '<div class="w-2 h-2 rounded-full bg-gray-600"></div><span>idle</span>';
+        }
+
+        const c = d.coordinates;
+        document.getElementById('coords').textContent =
+          c ? `${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}` : '';
+      } catch (_) {}
+    }
+
+    // ── Mission history ───────────────────────────────────────────────────────
+    let _selectedId = null;
+
+    const ICONS  = { success: '✓', failed: '✗', stopped: '■', running: '●' };
+    const COLORS = {
+      success: 'text-green-400', failed: 'text-red-400',
+      stopped: 'text-yellow-400', running: 'text-green-300 pulse-dot',
+    };
+
+    async function refreshMissions() {
+      try {
+        const missions = await fetch('/missions').then(r => r.json());
+        const listEl   = document.getElementById('mission-list');
+
+        if (!missions.length) {
+          listEl.innerHTML = '<p class="text-xs text-gray-600 px-1">No missions yet.</p>';
+          return;
+        }
+
+        // Auto-select running mission or most recent on first load
+        const running = missions.find(m => m.status === 'running');
+        if (!_selectedId) _selectedId = (running || missions[0]).id;
+
+        // Keep live log fresh while running mission is selected
+        if (running && _selectedId === running.id) loadLog(running.id);
+
+        listEl.innerHTML = missions.slice(0, 30).map(m => {
+          const dt  = new Date(m.started_at);
+          const lbl = dt.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+          const dur = m.duration_s != null
+            ? `${Math.floor(m.duration_s / 60)}m ${m.duration_s % 60}s` : '…';
+          const sel = m.id === _selectedId ? 'bg-gray-800' : '';
+          return `<div class="flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-xs hover:bg-gray-800 transition ${sel}"
+                       onclick="selectMission('${m.id}')">
+            <span class="${COLORS[m.status] || 'text-gray-500'}">${ICONS[m.status] || '?'}</span>
+            <span class="text-gray-300 truncate">${lbl}</span>
+            <span class="text-gray-600 shrink-0">${m.location?.camid || '—'}</span>
+            <span class="text-gray-700 shrink-0 ml-auto text-[10px]">${dur}</span>
+          </div>`;
+        }).join('');
+      } catch (_) {}
+    }
+
+    async function selectMission(id) {
+      _selectedId = id;
+      refreshMissions();   // re-render list to update highlight
+      await loadLog(id);
+    }
+
+    async function loadLog(id) {
+      try {
+        const txt = await fetch(`/missions/${id}/log`).then(r => r.text());
+        const el  = document.getElementById('mission-log');
+        el.textContent = txt;
+        el.scrollTop   = el.scrollHeight;
+      } catch (_) {}
+    }
+
+    // ── Pipeline controls ─────────────────────────────────────────────────────
+    function setMsg(msg) { document.getElementById('action-msg').textContent = msg; }
+
+    async function startPipeline() {
+      const lat   = document.getElementById('lat').value;
+      const lon   = document.getElementById('lon').value;
+      const camid = document.getElementById('camid').value;
+      const model = document.getElementById('model').value;
+      setMsg('Starting…');
+      try {
+        const url = `/initiate_pipeline?lat=${lat}&lon=${lon}`
+          + (camid ? `&camid=${encodeURIComponent(camid)}` : '')
+          + (model ? `&model=${encodeURIComponent(model)}` : '');
+        const r = await fetch(url, { method: 'POST' });
+        const d = await r.json();
+        setMsg(r.ok ? '✓ Pipeline started' : `✗ ${d.detail || 'Error'}`);
+      } catch (_) { setMsg('✗ Request failed'); }
+      refreshStatus();
+      setTimeout(refreshMissions, 1000);  // give server 1s to create mission dir
+    }
+
+    async function stopPipeline() {
+      setMsg('Stopping…');
+      try {
+        const r = await fetch('/stop_pipeline', { method: 'POST' });
+        setMsg(r.ok ? '✓ Stop signal sent' : '✗ Error');
+      } catch (_) { setMsg('✗ Request failed'); }
+      refreshStatus();
+    }
+
+    // Init
+    initDefaults();
+    setInterval(refreshStatus,   3000);
+    setInterval(refreshMissions, 5000);
+    refreshStatus();
+    refreshMissions();
+  </script>
+</body>
+</html>

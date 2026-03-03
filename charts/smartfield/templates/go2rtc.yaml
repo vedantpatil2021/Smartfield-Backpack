@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go2rtc-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: go2rtc
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  go2rtc.yaml: |
+    streams:
+      drone: "{{ .Values.go2rtc.droneRtspUrl }}"
+    api:
+      listen: ":{{ .Values.go2rtc.apiPort }}"
+    webrtc:
+      listen: ":{{ .Values.go2rtc.webrtcPort }}/udp"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go2rtc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: go2rtc
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: go2rtc
+  template:
+    metadata:
+      labels:
+        app: go2rtc
+    spec:
+      # hostNetwork: reaches drone WiFi (192.168.42.x) and exposes WebRTC UDP
+      # directly on the node — no NAT, sub-second latency.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: go2rtc
+          image: "{{ .Values.images.go2rtc.repository }}:{{ .Values.images.go2rtc.tag }}"
+          imagePullPolicy: {{ .Values.images.go2rtc.pullPolicy }}
+          args: ["-config", "/config/go2rtc.yaml"]
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources.go2rtc | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.go2rtc.apiPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: go2rtc-config
