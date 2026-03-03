@@ -20,6 +20,16 @@ images:
     repository: ghcr.io/icicle-ai/smartfield-wildwings
     tag: "1.1.0"
     pullPolicy: IfNotPresent
+  go2rtc:
+    repository: ghcr.io/alexxit/go2rtc
+    tag: "v1.9.4"
+    pullPolicy: IfNotPresent
+
+# ── go2rtc stream config ────────────────────────────────────────────────────────
+go2rtc:
+  droneRtspUrl: "rtsp://192.168.42.1/live"
+  apiPort: 1984        # HTTP API + built-in web player
+  webrtcPort: 8555     # WebRTC ICE/UDP
 
 # ── Persistent storage ─────────────────────────────────────────────────────────
 storage:
@@ -40,6 +50,11 @@ config:
   meta:
     version: "1.1.0"
 
+  logging:
+    dir:         "/var/log/smartfield"
+    missionsDir: "/var/log/smartfield/missions"
+    maxMissions: 100
+
   openpasslite:
     host: "0.0.0.0"
     port: 2177
@@ -51,6 +66,7 @@ config:
     host: "0.0.0.0"
     port: 2188
     logLevel: "INFO"
+    interStepDelaySeconds: 5   # seconds to pause between pipeline steps
 
   wildwings:
     host: "0.0.0.0"
@@ -58,6 +74,8 @@ config:
     logLevel: "INFO"
     missionDurationSeconds: 25
     modelPath: "/app/models/yolov5su.pt"
+    models:               # available detection models shown in UI dropdown
+      - yolov5su
 
   subscriber:
     clientId: "smartfield-subscriber"
@@ -117,3 +135,11 @@ resources:
     limits:
       cpu: "4"
       memory: "8Gi"
+
+  go2rtc:
+    requests:
+      cpu: "50m"
+      memory: "32Mi"
+    limits:
+      cpu: "500m"
+      memory: "128Mi"

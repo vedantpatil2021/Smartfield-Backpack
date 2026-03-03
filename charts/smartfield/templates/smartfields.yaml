@@ -19,6 +19,10 @@ spec:
       labels:
         app: smartfields
     spec:
+      # hostNetwork so the browser can reach port 2188 directly on the node,
+      # and so smartfields can call openpasslite/wildwings on localhost.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: smartfields
           image: "{{ .Values.images.smartfields.repository }}:{{ .Values.images.smartfields.tag }}"
@@ -26,15 +30,6 @@ spec:
           env:
             - name: PYTHONUNBUFFERED
               value: "1"
-            # NODE_IP lets smartfields reach hostNetwork services (openpasslite, wildwings)
-            - name: NODE_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-            - name: OPENPASSLITE_URL
-              value: "http://$(NODE_IP):{{ .Values.config.openpasslite.port }}"
-            - name: WILDWINGS_URL
-              value: "http://$(NODE_IP):{{ .Values.config.wildwings.port }}"
           volumeMounts:
             - name: config
               mountPath: /app/config.toml
@@ -58,6 +53,7 @@ spec:
           persistentVolumeClaim:
             claimName: smartfield-logs
 ---
+# ClusterIP Service — lets mqtt-subscriber reach smartfields via DNS
 apiVersion: v1
 kind: Service
 metadata:
